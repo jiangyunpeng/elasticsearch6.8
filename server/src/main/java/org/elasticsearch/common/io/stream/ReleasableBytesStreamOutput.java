@@ -40,7 +40,7 @@ public class ReleasableBytesStreamOutput extends BytesStreamOutput
 
     private Releasable releasable;
 
-    public ReleasableBytesStreamOutput(BigArrays bigarrays) {
+    public ReleasableBytesStreamOutput(BigArrays bigarrays) {//默认16k
         this(PageCacheRecycler.PAGE_SIZE_IN_BYTES, bigarrays);
     }
 

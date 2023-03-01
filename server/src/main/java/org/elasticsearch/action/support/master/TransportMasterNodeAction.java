@@ -168,10 +168,10 @@ public abstract class TransportMasterNodeAction<Request extends MasterNodeReques
             try {
                 final Predicate<ClusterState> masterChangePredicate = MasterNodeChangePredicate.build(clusterState);
                 final DiscoveryNodes nodes = clusterState.nodes();
-                if (nodes.isLocalNodeElectedMaster() || localExecute(request)) {
+                if (nodes.isLocalNodeElectedMaster() || localExecute(request)) {//如果是本地执行
                     // check for block, if blocked, retry, else, execute locally
                     final ClusterBlockException blockException = checkBlock(request, clusterState);
-                    if (blockException != null) {
+                    if (blockException != null) {//如果索引存在异常会重试，这个重试逻辑有点意思
                         if (!blockException.retryable()) {
                             listener.onFailure(blockException);
                         } else {

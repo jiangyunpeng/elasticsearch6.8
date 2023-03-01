@@ -167,10 +167,10 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 // get pipeline from request
                 String pipeline = indexRequest.getPipeline();
                 if (pipeline == null) {
-                    // start to look for default pipeline via settings found in the index meta data
+                    // 通过索引名中拿到IndexMetaData
                     IndexMetaData indexMetaData = indicesMetaData.get(actionRequest.index());
                     if (indexMetaData == null && indexRequest.index() != null) {
-                        // if the write request if through an alias use the write index's meta data
+                        // 看下是否有别名
                         AliasOrIndex indexOrAlias = metaData.getAliasAndIndexLookup().get(indexRequest.index());
                         if (indexOrAlias != null && indexOrAlias.isAlias()) {
                             AliasOrIndex.Alias alias = (AliasOrIndex.Alias) indexOrAlias;
@@ -185,18 +185,18 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                             hasIndexRequestsWithPipelines = true;
                         }
                     } else if (indexRequest.index() != null) {
-                        // No index exists yet (and is valid request), so matching index templates to look for a default pipeline
+                        // indexMetaData为空说明索引不存在，获取模板列表，返回的模板已经过排序
                         List<IndexTemplateMetaData> templates = MetaDataIndexTemplateService.findTemplates(metaData, indexRequest.index());
                         assert (templates != null);
                         String defaultPipeline = IngestService.NOOP_PIPELINE_NAME;
-                        // order of templates are highest order first, break if we find a default_pipeline
+                        //
                         for (IndexTemplateMetaData template : templates) {
                             final Settings settings = template.settings();
                             if (IndexSettings.DEFAULT_PIPELINE.exists(settings)) {
                                 defaultPipeline = IndexSettings.DEFAULT_PIPELINE.get(settings);
                                 break;
                             }
-                        }
+                        }//默认pipeline为"_none"
                         indexRequest.setPipeline(defaultPipeline);
                         if (IngestService.NOOP_PIPELINE_NAME.equals(defaultPipeline) == false) {
                             hasIndexRequestsWithPipelines = true;
@@ -242,13 +242,13 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             ClusterState state = clusterService.state();
             for (String index : indices) {
                 boolean shouldAutoCreate;
-                try {
+                try {//是否应该自动创建索引
                     shouldAutoCreate = shouldAutoCreate(index, state);
                 } catch (IndexNotFoundException e) {
                     shouldAutoCreate = false;
                     indicesThatCannotBeCreated.put(index, e);
                 }
-                if (shouldAutoCreate) {
+                if (shouldAutoCreate) {//加入到list中，下次不用再判断
                     autoCreateIndices.add(index);
                 }
             }
@@ -257,11 +257,11 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 executeBulk(task, bulkRequest, startTime, listener, responses, indicesThatCannotBeCreated);
             } else {
                 final AtomicInteger counter = new AtomicInteger(autoCreateIndices.size());
-                for (String index : autoCreateIndices) {
+                for (String index : autoCreateIndices) {//创建索引
                     createIndex(index, bulkRequest.timeout(), new ActionListener<CreateIndexResponse>() {
                         @Override
                         public void onResponse(CreateIndexResponse result) {
-                            if (counter.decrementAndGet() == 0) {
+                            if (counter.decrementAndGet() == 0) {//创建索引成功之后写入索引
                                 executeBulk(task, bulkRequest, startTime, listener, responses, indicesThatCannotBeCreated);
                             }
                         }
@@ -438,6 +438,10 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 if (task != null) {
                     bulkShardRequest.setParentTask(nodeId, task.getId());
                 }
+
+                // TransportReplicationAction.doExecute()
+                //  -> TransportReplicationAction$ReroutePhase.doRun()
+                //      -> TransportService.sendRequest() 写数据
                 shardBulkAction.execute(bulkShardRequest, new ActionListener<BulkShardResponse>() {
                     @Override
                     public void onResponse(BulkShardResponse bulkShardResponse) {

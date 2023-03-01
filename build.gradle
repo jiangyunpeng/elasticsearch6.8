@@ -374,7 +374,7 @@ gradle.projectsEvaluated {
       return
     }
     if (tasks.findByPath('test') != null && tasks.findByPath('integTest') != null) {
-      integTest.mustRunAfter test
+      // integTest.mustRunAfter test
     }
     configurations.all { Configuration configuration ->
       dependencies.all { Dependency dep ->
@@ -388,7 +388,7 @@ gradle.projectsEvaluated {
             Task task = project.tasks.findByName(taskName)
             Task upstreamTask = upstreamProject.tasks.findByName(taskName)
             if (task != null && upstreamTask != null) {
-              task.shouldRunAfter(upstreamTask)
+              // task.shouldRunAfter(upstreamTask)
             }
           }
         }

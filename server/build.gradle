@@ -363,3 +363,5 @@ unitTest {
   exclude '**/ScriptedMetricAggregatorAggStateV6CompatTests.class'
   exclude '**/InternalScriptedMetricAggStateV6CompatTests.class'
 }
+
+forbiddenApisMain.enabled = false

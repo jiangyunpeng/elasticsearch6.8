@@ -77,7 +77,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
         Task task = taskManager.register("transport", actionName, request);
         if (task == null) {
             execute(null, request, listener);
-        } else {
+        } else { //本地执行这里
             execute(task, request, new ActionListener<Response>() {
                 @Override
                 public void onResponse(Response response) {

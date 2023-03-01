@@ -56,7 +56,6 @@ import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
@@ -203,11 +202,11 @@ final class Bootstrap {
         IfConfig.logIfNecessary();
 
         // install SM after natives, shutdown hooks, etc.
-        try {
-            Security.configure(environment, BootstrapSettings.SECURITY_FILTER_BAD_DEFAULTS_SETTING.get(settings));
-        } catch (IOException | NoSuchAlgorithmException e) {
-            throw new BootstrapException(e);
-        }
+//        try {
+//            Security.configure(environment, BootstrapSettings.SECURITY_FILTER_BAD_DEFAULTS_SETTING.get(settings));
+//        } catch (IOException | NoSuchAlgorithmException e) {
+//            throw new BootstrapException(e);
+//        }
 
         node = new Node(environment) {
             @Override

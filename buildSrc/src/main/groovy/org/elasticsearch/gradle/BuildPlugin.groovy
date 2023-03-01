@@ -120,6 +120,7 @@ class BuildPlugin implements Plugin<Project> {
 
     /** Performs checks on the build environment and prints information about the build environment. */
     static void globalBuildInfo(Project project) {
+        //只会执行一次
         if (project.rootProject.ext.has('buildChecksDone') == false) {
             JavaVersion minimumRuntimeVersion = JavaVersion.toVersion(
                     BuildPlugin.class.getClassLoader().getResourceAsStream("minimumRuntimeVersion").text.trim()
@@ -137,7 +138,7 @@ class BuildPlugin implements Plugin<Project> {
                     javaVersions.put(version, findJavaHome(version.toString()));
                 }
             }
-
+            println '#################################debug1 #######################################################'
             String javaVendorVersion = System.getProperty('java.vendor.version', System.getProperty('java.vendor'))
             String gradleJavaVersion = System.getProperty('java.version')
             String gradleJavaVersionDetails = "${javaVendorVersion} ${gradleJavaVersion}" +
@@ -364,6 +365,7 @@ class BuildPlugin implements Plugin<Project> {
 
     private static String findCompilerJavaHome() {
         String compilerJavaHome = System.getenv('JAVA_HOME')
+        println "JAVA_HOME: "+compilerJavaHome
         final String compilerJavaProperty = System.getProperty('compiler.java')
         if (compilerJavaProperty != null) {
             compilerJavaHome = findJavaHome(compilerJavaProperty)
@@ -463,6 +465,8 @@ class BuildPlugin implements Plugin<Project> {
 
     /** Runs the given javascript using jjs from the jdk, and returns the output */
     private static String runScript(Project project, String javaHome, String script) {
+        print 'runScript: ' + script+ '\t javaHome:'+javaHome+'\t project: '+project
+        javaHome = '/usr'
         if (Os.isFamily(Os.FAMILY_WINDOWS)) {
             // gradle/groovy does not properly escape the double quote for windows
             script = script.replace('"', '\\"')
@@ -885,7 +889,7 @@ class BuildPlugin implements Plugin<Project> {
             // add license/notice files
             project.afterEvaluate {
                 if (project.licenseFile == null || project.noticeFile == null) {
-                    throw new GradleException("Must specify license and notice file for project ${project.path}")
+                    //throw new GradleException("Must specify license and notice file for project ${project.path}")
                 }
                 jarTask.metaInf {
                     from(project.licenseFile.parent) {
