@@ -114,6 +114,7 @@ public class Netty4Utils {
                 if (buffers.size() == 1) {
                     return buffers.get(0);
                 } else {
+                    //使用 CompositeByteBuf 组合多个ByteBuf
                     CompositeByteBuf composite = Unpooled.compositeBuffer(buffers.size());
                     composite.addComponents(true, buffers);
                     return composite;

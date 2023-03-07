@@ -75,6 +75,10 @@ public class PagedBytesReference extends BytesReference {
         return bref;
     }
 
+    /**
+     * 该方法确保返回 BytesRef 大小不会超多PAGE_SIZE，数据类似：|16K|16K|16K|
+     * @return
+     */
     @Override
     public final BytesRefIterator iterator() {
         final int offset = this.offset;

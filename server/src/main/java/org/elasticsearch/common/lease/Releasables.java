@@ -96,6 +96,7 @@ public enum Releasables {
     }
 
     /**
+     * 返回一个包装类，确保不会执行两次close
      * Equivalent to {@link #wrap(Releasable...)} but can be called multiple times without double releasing.
      */
     public static Releasable releaseOnce(final Releasable... releasables) {

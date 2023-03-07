@@ -116,12 +116,12 @@ public class PathTrie<T> {
 
             String token = path[index];
             String key = token;
-            if (isNamedWildcard(token)) {
+            if (isNamedWildcard(token)) {//是否是占位符{token}
                 key = wildcard;
             }
             TrieNode node = children.get(key);
             if (node == null) {
-                T nodeValue = index == path.length - 1 ? value : null;
+                T nodeValue = index == path.length - 1 ? value : null;//如果叶子返回value否则返回null
                 node = new TrieNode(token, nodeValue, wildcard);
                 addInnerChild(key, node);
             } else {
@@ -141,7 +141,7 @@ public class PathTrie<T> {
                     }
                 }
             }
-
+            //递归调用,index+1
             node.insert(path, index + 1, value);
         }
 
@@ -254,8 +254,9 @@ public class PathTrie<T> {
             if (index == (path.length - 1)) {
                 return node.value;
             }
-
+            //继续递归
             T nodeValue = node.retrieve(path, index + 1, params, trieMatchingMode);
+            //按照key没有匹配到，继续尝试通过通配符
             if (nodeValue == null && !usedWildcard && trieMatchingMode != TrieMatchingMode.EXPLICIT_NODES_ONLY) {
                 node = children.get(wildcard);
                 if (node != null) {
@@ -288,7 +289,7 @@ public class PathTrie<T> {
             rootValue = value;
             return;
         }
-        int index = 0;
+        int index = 0;//默认从0开始
         // Supports initial delimiter.
         if (strings[0].isEmpty()) {
             index = 1;
@@ -357,6 +358,7 @@ public class PathTrie<T> {
         return new PathTrieIterator<>(this, path, paramSupplier);
     }
 
+    //构造了4种匹配模式逐个尝试
     class PathTrieIterator<T> implements Iterator<T> {
 
         private final List<TrieMatchingMode> modes;

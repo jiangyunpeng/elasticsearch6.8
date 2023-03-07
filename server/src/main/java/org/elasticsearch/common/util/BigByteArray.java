@@ -34,13 +34,14 @@ import static org.elasticsearch.common.util.PageCacheRecycler.BYTE_PAGE_SIZE;
 final class BigByteArray extends AbstractBigArray implements ByteArray {
 
     private static final BigByteArray ESTIMATOR = new BigByteArray(0, BigArrays.NON_RECYCLING_INSTANCE, false);
-
+    //通过二维数组保存数据，x为page，y为byte[](默认16k)
     private byte[][] pages;
 
     /** Constructor. */
     BigByteArray(long size, BigArrays bigArrays, boolean clearOnResize) {
         super(BYTE_PAGE_SIZE, bigArrays, clearOnResize);
         this.size = size;
+        //通过size计算有多少page
         pages = new byte[numPages(size)][];
         for (int i = 0; i < pages.length; ++i) {
             pages[i] = newBytePage(i);
@@ -74,7 +75,7 @@ final class BigByteArray extends AbstractBigArray implements ByteArray {
             ref.offset = indexInPage;
             ref.length = len;
             return false;
-        } else {
+        } else {//超过pageSize
             ref.bytes = new byte[len];
             ref.offset = 0;
             ref.length = pageSize() - indexInPage;

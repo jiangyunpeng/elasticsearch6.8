@@ -48,6 +48,7 @@ public class ConcurrentDequeRecycler<T> extends DequeRecycler<T> {
     public V<T> obtain(int sizing) {
         final V<T> v = super.obtain(sizing);
         if (v.isRecycled()) {
+            //说明v是从队列中获取，所以队列的size要减1
             size.decrementAndGet();
         }
         return v;

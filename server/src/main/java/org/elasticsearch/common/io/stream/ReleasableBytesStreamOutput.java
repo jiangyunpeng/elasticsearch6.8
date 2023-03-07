@@ -40,12 +40,13 @@ public class ReleasableBytesStreamOutput extends BytesStreamOutput
 
     private Releasable releasable;
 
-    public ReleasableBytesStreamOutput(BigArrays bigarrays) {//默认16k
+    public ReleasableBytesStreamOutput(BigArrays bigarrays) {
         this(PageCacheRecycler.PAGE_SIZE_IN_BYTES, bigarrays);
     }
-
+    //每页默认为16k
     public ReleasableBytesStreamOutput(int expectedSize, BigArrays bigArrays) {
         super(expectedSize, bigArrays);
+        //this.bytes在父类刚创建好，通过releasable包装确保无法重复调用close
         this.releasable = Releasables.releaseOnce(this.bytes);
     }
 

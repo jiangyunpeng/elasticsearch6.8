@@ -41,6 +41,8 @@ public enum Recyclers {
     }
 
     /**
+     * limit 用于限制回收的对象数量
+     * 在v.close之前会判断
      * Return a recycler based on a deque.
      */
     public static <T> Recycler<T> deque(Recycler.C<T> c, int limit) {
@@ -148,6 +150,7 @@ public enum Recyclers {
     }
 
     /**
+     * 创建一个并发实现，它可以支持从并发级别线程进行的并发访问，几乎没有争用，基于分段锁
      * Create a concurrent implementation that can support concurrent access from
      * <code>concurrencyLevel</code> threads with little contention.
      */
@@ -158,6 +161,7 @@ public enum Recyclers {
         if (concurrencyLevel == 1) {
             return locked(factory.build());
         }
+        //本质是一个分段锁，不同线程通过getDelegate()会得到不同Recycler
         return new FilterRecycler<T>() {
 
             private final Recycler<T>[] recyclers;

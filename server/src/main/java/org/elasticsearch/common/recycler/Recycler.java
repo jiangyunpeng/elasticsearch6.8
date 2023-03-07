@@ -31,6 +31,8 @@ public interface Recycler<T> extends Releasable {
         Recycler<T> build();
     }
 
+    //C代表Controller，定义如何Create、Recycle、Destroy数据，由用户传入构造函数
+    //Recycle强依赖Recycler.C
     interface C<T> {
 
         /** Create a new empty instance of the given size. */

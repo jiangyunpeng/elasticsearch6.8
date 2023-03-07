@@ -128,7 +128,7 @@ class Netty4HttpRequestHandler extends SimpleChannelInboundHandler<Object> {
                 }
                 channel = innerChannel;
             }
-
+            //如果直接失败
             if (request.decoderResult().isFailure()) {
                 serverTransport.dispatchBadRequest(httpRequest, channel, request.decoderResult().cause());
             } else if (badRequestCause != null) {

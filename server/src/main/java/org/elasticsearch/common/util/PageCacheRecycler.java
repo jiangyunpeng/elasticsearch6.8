@@ -80,7 +80,7 @@ public class PageCacheRecycler implements Releasable {
 
     public PageCacheRecycler(Settings settings) {
         final Type type = TYPE_SETTING.get(settings);
-        final long limit = LIMIT_HEAP_SETTING.get(settings).getBytes();
+        final long limit = LIMIT_HEAP_SETTING.get(settings).getBytes(); //默认为heap的10%，31g就是3.1g
         final int availableProcessors = EsExecutors.numberOfProcessors(settings);
 
         // We have a global amount of memory that we need to divide across data types.
@@ -102,8 +102,8 @@ public class PageCacheRecycler implements Releasable {
         final double objectsWeight = WEIGHT_OBJECTS_SETTING .get(settings);
 
         final double totalWeight = bytesWeight + intsWeight + longsWeight + objectsWeight;
-        final int maxPageCount = (int) Math.min(Integer.MAX_VALUE, limit / PAGE_SIZE_IN_BYTES);
-
+        final int maxPageCount = (int) Math.min(Integer.MAX_VALUE, limit / PAGE_SIZE_IN_BYTES);//内存总量/16k=最大的page数
+        //bytePage数量，总量的*32%
         final int maxBytePageCount = (int) (bytesWeight * maxPageCount / totalWeight);
         bytePage = build(type, maxBytePageCount, availableProcessors, new AbstractRecyclerC<byte[]>() {
             @Override
@@ -115,7 +115,7 @@ public class PageCacheRecycler implements Releasable {
                 // nothing to do
             }
         });
-
+        //intPage数量
         final int maxIntPageCount = (int) (intsWeight * maxPageCount / totalWeight);
         intPage = build(type, maxIntPageCount, availableProcessors, new AbstractRecyclerC<int[]>() {
             @Override
@@ -127,7 +127,7 @@ public class PageCacheRecycler implements Releasable {
                 // nothing to do
             }
         });
-
+        //longPage数量
         final int maxLongPageCount = (int) (longsWeight * maxPageCount / totalWeight);
         longPage = build(type, maxLongPageCount, availableProcessors, new AbstractRecyclerC<long[]>() {
             @Override
@@ -140,6 +140,7 @@ public class PageCacheRecycler implements Releasable {
             }
         });
 
+        //objectPage数量
         final int maxObjectPageCount = (int) (objectsWeight * maxPageCount / totalWeight);
         objectPage = build(type, maxObjectPageCount, availableProcessors, new AbstractRecyclerC<Object[]>() {
             @Override

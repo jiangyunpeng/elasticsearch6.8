@@ -585,6 +585,8 @@ public abstract class StreamOutput extends OutputStream {
     private static final Map<Class<?>, Writer> WRITERS;
 
     static {
+        //对于不同的类型使用不同的writer，可以发现都会先记录一个flag
+        //看下 writeGenericValue()方法就明白了
         Map<Class<?>, Writer> writers = new HashMap<>();
         writers.put(String.class, (o, v) -> {
             o.writeByte((byte) 0);

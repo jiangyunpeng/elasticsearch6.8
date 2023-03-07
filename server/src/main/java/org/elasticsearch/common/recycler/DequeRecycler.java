@@ -30,6 +30,7 @@ public class DequeRecycler<T> extends AbstractRecycler<T> {
     final Deque<T> deque;
     final int maxSize;
 
+    //maxSize用于限制可以回收的数量
     public DequeRecycler(C<T> c, Deque<T> queue, int maxSize) {
         super(c);
         this.deque = queue;
