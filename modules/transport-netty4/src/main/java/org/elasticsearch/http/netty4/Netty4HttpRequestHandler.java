@@ -64,7 +64,7 @@ class Netty4HttpRequestHandler extends SimpleChannelInboundHandler<Object> {
 
         boolean success = false;
         try {
-
+            //这里为什么要复制一份?
             final FullHttpRequest copy =
                     new DefaultFullHttpRequest(
                             request.protocolVersion(),
@@ -73,6 +73,7 @@ class Netty4HttpRequestHandler extends SimpleChannelInboundHandler<Object> {
                             Unpooled.copiedBuffer(request.content()),
                             request.headers(),
                             request.trailingHeaders());
+
 
             Exception badRequestCause = null;
 

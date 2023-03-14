@@ -314,7 +314,7 @@ public class RestController implements HttpServerTransport.Dispatcher {
     }
 
     void tryAllHandlers(final RestRequest request, final RestChannel channel, final ThreadContext threadContext) throws Exception {
-        for (String key : headersToCopy) {
+        for (String key : headersToCopy) {//Authorization、es-security-runas-user、X-Opaque-Id 复制出来
             String httpHeader = request.header(key);
             if (httpHeader != null) {
                 threadContext.putHeader(key, httpHeader);

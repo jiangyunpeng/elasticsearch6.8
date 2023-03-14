@@ -281,6 +281,7 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
 
     @Override
     public Releasable openConnection(DiscoveryNode node, ConnectionProfile profile, ActionListener<Transport.Connection> listener) {
+        //ConnectionProfile 是配置信息
         Objects.requireNonNull(profile, "connection profile cannot be null");
         if (node == null) {
             throw new ConnectTransportException(null, "can't open connection to a null node");

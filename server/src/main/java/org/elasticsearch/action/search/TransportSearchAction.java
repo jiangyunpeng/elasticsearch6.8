@@ -346,7 +346,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
         setMaxConcurrentShardRequests(searchRequest, nodeCount);
         boolean preFilterSearchShards = shouldPreFilterSearchShards(searchRequest, shardIterators);
         searchAsyncAction(task, searchRequest, shardIterators, timeProvider, connectionLookup, clusterState.version(),
-            Collections.unmodifiableMap(aliasFilter), concreteIndexBoosts, routingMap, listener, preFilterSearchShards, clusters).start();
+            Collections.unmodifiableMap(aliasFilter), concreteIndexBoosts, routingMap, listener, preFilterSearchShards, clusters)
+            .start();
     }
 
     static void setMaxConcurrentShardRequests(SearchRequest searchRequest, int nodeCount) {

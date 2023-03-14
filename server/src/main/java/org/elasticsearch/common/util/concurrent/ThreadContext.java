@@ -126,6 +126,8 @@ public final class ThreadContext implements Closeable, Writeable {
     }
 
     /**
+     * 1. 把 threadLocal 设置为null
+     * 2. 当执行StoredContext.close()再恢复 threadLocal
      * Removes the current context and resets a default context. The removed context can be
      * restored by closing the returned {@link StoredContext}.
      */

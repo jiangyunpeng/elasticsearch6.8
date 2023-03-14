@@ -188,6 +188,7 @@ public abstract class TransportMasterNodeAction<Request extends MasterNodeReques
                             });
                         }
                     } else {
+                        //这里增加一层代理是增加retry，见下面的onFailure
                         ActionListener<Response> delegate = new ActionListener<Response>() {
                             @Override
                             public void onResponse(Response response) {
