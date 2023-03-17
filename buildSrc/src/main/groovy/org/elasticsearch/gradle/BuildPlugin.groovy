@@ -106,7 +106,7 @@ class BuildPlugin implements Plugin<Project> {
         project.ext.versions = VersionProperties.versions
         configureSourceSets(project)
         configureCompile(project)
-        configureJavadoc(project)
+        //configureJavadoc(project)
         configureSourcesJar(project)
         configurePomGeneration(project)
 

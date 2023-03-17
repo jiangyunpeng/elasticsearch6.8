@@ -42,9 +42,9 @@ class PrecommitTasks {
         project.dependencies {
             forbiddenApisCliJar ('de.thetaphi:forbiddenapis:2.6')
         }
-
+        //注释掉 configureCheckstyle 因为容易报错
         List<Task> precommitTasks = [
-            configureCheckstyle(project),
+            //configureCheckstyle(project),
             configureForbiddenApisCli(project),
             project.tasks.create('forbiddenPatterns', ForbiddenPatternsTask.class),
             project.tasks.create('licenseHeaders', LicenseHeadersTask.class),

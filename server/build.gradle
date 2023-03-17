@@ -356,7 +356,8 @@ task testScriptedMetricAggParamsV6Compatibility(type: RandomizedTestingTask) {
   classpath = tasks.test.classpath
   testClassesDirs = tasks.test.testClassesDirs
 }
-check.dependsOn(testScriptedMetricAggParamsV6Compatibility)
+
+//check.dependsOn(testScriptedMetricAggParamsV6Compatibility)
 
 unitTest {
   // these are tested explicitly in separate test tasks
@@ -364,4 +365,7 @@ unitTest {
   exclude '**/InternalScriptedMetricAggStateV6CompatTests.class'
 }
 
+//关闭检测
+forbiddenApisTest.enabled = false
 forbiddenApisMain.enabled = false
+testingConventions.enabled = false

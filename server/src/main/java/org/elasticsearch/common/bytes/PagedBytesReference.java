@@ -77,7 +77,6 @@ public class PagedBytesReference extends BytesReference {
 
     /**
      * 该方法确保返回 BytesRef 大小不会超多PAGE_SIZE，数据类似：|16K|16K|16K|
-     * @return
      */
     @Override
     public final BytesRefIterator iterator() {
