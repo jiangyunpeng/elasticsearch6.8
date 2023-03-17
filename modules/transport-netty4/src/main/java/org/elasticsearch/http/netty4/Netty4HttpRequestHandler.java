@@ -64,7 +64,8 @@ class Netty4HttpRequestHandler extends SimpleChannelInboundHandler<Object> {
 
         boolean success = false;
         try {
-            //这里为什么要复制一份?
+            //这里复制一份是因为方法执行完request会被回收掉，详见SimpleChannelInboundHandler.channelRead()
+            //而es是异步操作，可能再request被回收之后再去请求内容，这时候拿到的内容是错的
             final FullHttpRequest copy =
                     new DefaultFullHttpRequest(
                             request.protocolVersion(),
