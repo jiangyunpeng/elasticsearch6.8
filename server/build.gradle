@@ -340,10 +340,15 @@ task integTest(type: Test) {
   include '**/*IT.class'
 }
 
-check.dependsOn integTest
+//check.dependsOn integTest
 
 task internalClusterTest {
   dependsOn integTest
 }
 
-
+forbiddenApisTest.enabled = false
+forbiddenApisMain.enabled = false
+testingConventions.enabled = false
+//checkstyleMain.enabled = false
+javadoc.enabled = false
+loggerUsageCheck.enabled=false

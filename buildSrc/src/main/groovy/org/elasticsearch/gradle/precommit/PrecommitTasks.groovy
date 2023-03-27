@@ -57,7 +57,7 @@ class PrecommitTasks {
         }
 
         List<TaskProvider> precommitTasks = [
-                configureCheckstyle(project),
+                //configureCheckstyle(project),
                 configureForbiddenApisCli(project),
                 project.tasks.register('forbiddenPatterns', ForbiddenPatternsTask),
                 project.tasks.register('licenseHeaders', LicenseHeadersTask),

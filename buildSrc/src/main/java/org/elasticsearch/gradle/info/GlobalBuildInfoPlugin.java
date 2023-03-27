@@ -62,8 +62,8 @@ public class GlobalBuildInfoPlugin implements Plugin<Project> {
             throw new IllegalStateException(this.getClass().getName() + " can only be applied to the root project.");
         }
 
-        JavaVersion minimumCompilerVersion = JavaVersion.toVersion(Util.getResourceContents("/minimumCompilerVersion"));
-        JavaVersion minimumRuntimeVersion = JavaVersion.toVersion(Util.getResourceContents("/minimumRuntimeVersion"));
+        JavaVersion minimumCompilerVersion = JavaVersion.VERSION_11; 
+        JavaVersion minimumRuntimeVersion = JavaVersion.VERSION_11;
 
         File compilerJavaHome = findCompilerJavaHome();
         File runtimeJavaHome = findRuntimeJavaHome(compilerJavaHome);
