@@ -56,4 +56,11 @@ public class NetUtils {
             return null;
         }
     }
+
+    public static void main(String[] args) {
+        System.out.println(NetUtils.getTcpKeepIdleSocketOptionOrNull());
+        System.out.println(NetUtils.getTcpKeepIntervalSocketOptionOrNull());
+    }
+
+
 }

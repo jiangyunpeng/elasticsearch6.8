@@ -78,6 +78,7 @@ public final class HttpChannelTaskHandler {
                 }
             });
         closeListener.registerTask(taskHolder, new TaskId(client.getLocalNodeId(), task.getId()));
+        //注册到 httpChannel
         closeListener.maybeRegisterChannel(httpChannel);
     }
 

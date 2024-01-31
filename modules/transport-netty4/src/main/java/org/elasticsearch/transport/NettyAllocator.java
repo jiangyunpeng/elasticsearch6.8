@@ -85,7 +85,7 @@ public class NettyAllocator {
             return Booleans.parseBoolean(System.getProperty(USE_UNPOOLED));
         } else {
             long heapSize = JvmInfo.jvmInfo().getMem().getHeapMax().getBytes();
-            return heapSize <= 1 << 30;
+            return heapSize <= 1 << 30;//不超过1g使用Unpooled
         }
     }
 

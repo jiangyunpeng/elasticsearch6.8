@@ -125,6 +125,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
             listener = new TaskResultStoringActionListener<>(taskManager, task, listener);
         }
 
+        //RequestFilterChain会调用doExecute()方法
         RequestFilterChain<Request, Response> requestFilterChain = new RequestFilterChain<>(this, logger);
         requestFilterChain.proceed(task, actionName, request, listener);
     }
