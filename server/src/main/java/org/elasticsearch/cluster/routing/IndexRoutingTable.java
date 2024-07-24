@@ -64,11 +64,13 @@ import java.util.Set;
  */
 public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> implements Iterable<IndexShardRoutingTable> {
 
+    // 索引信息，包含索引名称、uuid
     private final Index index;
     private final ShardShuffler shuffler;
 
     // note, we assume that when the index routing is created, ShardRoutings are created for all possible number of
     // shards with state set to UNASSIGNED
+    // 索引的分片列表，key是int为分片的编号，例如 1 号分片，2 号分片
     private final ImmutableOpenIntMap<IndexShardRoutingTable> shards;
 
     private final List<ShardRouting> allActiveShards;

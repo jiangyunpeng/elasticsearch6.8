@@ -29,6 +29,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.discovery.zen.ElectMasterService;
@@ -59,10 +60,12 @@ public class Gateway {
     }
 
     public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
+        // 获取集群中所有 master 节点的 ID
         String[] nodesIds = clusterService.state().nodes().getMasterNodes().keys().toArray(String.class);
-        logger.trace("performing state recovery from {}", Arrays.toString(nodesIds));
-        TransportNodesListGatewayMetaState.NodesGatewayMetaState nodesState = listGatewayMetaState.list(nodesIds, null).actionGet();
+        SourceLogger.info("performing state recovery from {}", Arrays.toString(nodesIds));
 
+        // 从 master 节点获取元数据状态
+        TransportNodesListGatewayMetaState.NodesGatewayMetaState nodesState = listGatewayMetaState.list(nodesIds, null).actionGet();
 
         int requiredAllocation = Math.max(1, minimumMasterNodes);
 
@@ -72,10 +75,11 @@ public class Gateway {
                 logger.warn("failed to fetch state from node", failedNodeException);
             }
         }
-
+        // 用于存储索引和其出现的次数的映射
         ObjectFloatHashMap<Index> indices = new ObjectFloatHashMap<>();
         MetaData electedGlobalState = null;
         int found = 0;
+        // 遍历所有节点的状态，找出最新的全局元数据和所有索引的元数据
         for (TransportNodesListGatewayMetaState.NodeGatewayMetaState nodeState : nodesState.getNodes()) {
             if (nodeState.metaData() == null) {
                 continue;
@@ -83,27 +87,30 @@ public class Gateway {
             found++;
             if (electedGlobalState == null) {
                 electedGlobalState = nodeState.metaData();
-            } else if (nodeState.metaData().version() > electedGlobalState.version()) {
+            } else if (nodeState.metaData().version() > electedGlobalState.version()) { //选择版本最大作为最新的
                 electedGlobalState = nodeState.metaData();
             }
             for (ObjectCursor<IndexMetaData> cursor : nodeState.metaData().indices().values()) {
                 indices.addTo(cursor.value.getIndex(), 1);
             }
         }
+        // 如果找到的元数据状态数小于需要的分配数量，触发失败回调
         if (found < requiredAllocation) {
             listener.onFailure("found [" + found + "] metadata states, required [" + requiredAllocation + "]");
             return;
         }
-        // update the global state, and clean the indices, we elect them in the next phase
+        // 更新全局状态，清除索引元数据，将它们放入下一个阶段的选择过程
         MetaData.Builder metaDataBuilder = MetaData.builder(electedGlobalState).removeAllIndices();
 
         assert !indices.containsKey(null);
         final Object[] keys = indices.keys;
+        // 遍历所有索引，选出最新的索引元数据
         for (int i = 0; i < keys.length; i++) {
             if (keys[i] != null) {
                 Index index = (Index) keys[i];
                 IndexMetaData electedIndexMetaData = null;
                 int indexMetaDataCount = 0;
+                // 遍历所有节点的状态，找出最新的全局元数据和所有索引的元数据
                 for (TransportNodesListGatewayMetaState.NodeGatewayMetaState nodeState : nodesState.getNodes()) {
                     if (nodeState.metaData() == null) {
                         continue;
@@ -120,12 +127,13 @@ public class Gateway {
                     indexMetaDataCount++;
                 }
                 if (electedIndexMetaData != null) {
+                    // 如果找到的元数据状态数小于需要的分配数量，触发失败回调
                     if (indexMetaDataCount < requiredAllocation) {
                         logger.debug("[{}] found [{}], required [{}], not adding", index, indexMetaDataCount, requiredAllocation);
                     } // TODO if this logging statement is correct then we are missing an else here
                     try {
                         if (electedIndexMetaData.getState() == IndexMetaData.State.OPEN) {
-                            // verify that we can actually create this index - if not we recover it as closed with lots of warn logs
+                            // 验证能否实际创建此索引，如果不能则将其恢复为关闭状态
                             indicesService.verifyIndexMetadata(electedIndexMetaData, electedIndexMetaData);
                         }
                     } catch (Exception e) {
@@ -138,6 +146,7 @@ public class Gateway {
                 }
             }
         }
+        // 构建集群状态并触发成功回调
         final ClusterState.Builder builder = upgradeAndArchiveUnknownOrInvalidSettings(metaDataBuilder);
         listener.onSuccess(builder.build());
     }

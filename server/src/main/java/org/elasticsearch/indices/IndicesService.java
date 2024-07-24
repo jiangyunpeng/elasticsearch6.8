@@ -43,6 +43,7 @@ import org.elasticsearch.cluster.routing.RecoverySource;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
@@ -508,7 +509,7 @@ public class IndicesService extends AbstractLifecycleComponent
         final IndexSettings idxSettings = new IndexSettings(indexMetaData, settings, indexScopedSettings);
         // we ignore private settings since they are not registered settings
         indexScopedSettings.validate(indexMetaData.getSettings(), true, true, true);
-        logger.debug("creating Index [{}], shards [{}]/[{}] - reason [{}]",
+        SourceLogger.info("creating Index [{}], shards [{}]/[{}] - reason [{}]",
             indexMetaData.getIndex(),
             idxSettings.getNumberOfShards(),
             idxSettings.getNumberOfReplicas(),

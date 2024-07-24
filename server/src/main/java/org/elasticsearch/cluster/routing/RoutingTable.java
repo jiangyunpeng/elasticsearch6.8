@@ -60,7 +60,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
 
     private final long version;
 
-    // index to IndexRoutingTable map
+    //key 为索引名，IndexRoutingTable 为该索引包含的分片信息
     private final ImmutableOpenMap<String, IndexRoutingTable> indicesRouting;
 
     RoutingTable(long version, ImmutableOpenMap<String, IndexRoutingTable> indicesRouting) {

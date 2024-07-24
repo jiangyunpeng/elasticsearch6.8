@@ -45,6 +45,7 @@ public class ThreadContextTests extends ESTestCase {
         assertEquals("bar", threadContext.getHeader("foo"));
         assertEquals(Integer.valueOf(1), threadContext.getTransient("ctx.foo"));
         assertEquals("1", threadContext.getHeader("default"));
+
         try (ThreadContext.StoredContext ctx = threadContext.stashContext()) {
             assertNull(threadContext.getHeader("foo"));
             assertNull(threadContext.getTransient("ctx.foo"));

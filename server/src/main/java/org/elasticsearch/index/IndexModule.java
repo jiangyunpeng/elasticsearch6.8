@@ -19,6 +19,8 @@
 
 package org.elasticsearch.index;
 
+import org.apache.log4j.spi.LoggerFactory;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.store.MMapDirectory;
@@ -26,8 +28,10 @@ import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.Version;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.TriFunction;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
@@ -93,20 +97,22 @@ public final class IndexModule {
         Setting.boolSetting("node.store.allow_mmap", NODE_STORE_ALLOW_MMAPFS, Property.NodeScope);
 
     public static final Setting<String> INDEX_STORE_TYPE_SETTING =
-            new Setting<>("index.store.type", "", Function.identity(), Property.IndexScope, Property.NodeScope);
+        new Setting<>("index.store.type", "", Function.identity(), Property.IndexScope, Property.NodeScope);
 
-    /** On which extensions to load data into the file-system cache upon opening of files.
-     *  This only works with the mmap directory, and even in that case is still
-     *  best-effort only. */
+    /**
+     * On which extensions to load data into the file-system cache upon opening of files.
+     * This only works with the mmap directory, and even in that case is still
+     * best-effort only.
+     */
     public static final Setting<List<String>> INDEX_STORE_PRE_LOAD_SETTING =
-            Setting.listSetting("index.store.preload", Collections.emptyList(), Function.identity(),
-                    Property.IndexScope, Property.NodeScope);
+        Setting.listSetting("index.store.preload", Collections.emptyList(), Function.identity(),
+            Property.IndexScope, Property.NodeScope);
 
     public static final String SIMILARITY_SETTINGS_PREFIX = "index.similarity";
 
     // whether to use the query cache
     public static final Setting<Boolean> INDEX_QUERY_CACHE_ENABLED_SETTING =
-            Setting.boolSetting("index.queries.cache.enabled", true, Property.IndexScope);
+        Setting.boolSetting("index.queries.cache.enabled", true, Property.IndexScope);
 
     // for test purposes only
     public static final Setting<Boolean> INDEX_QUERY_CACHE_EVERYTHING_SETTING =
@@ -134,10 +140,10 @@ public final class IndexModule {
      * @param indexStoreFactories the available store types
      */
     public IndexModule(
-            final IndexSettings indexSettings,
-            final AnalysisRegistry analysisRegistry,
-            final EngineFactory engineFactory,
-            final Map<String, Function<IndexSettings, IndexStore>> indexStoreFactories) {
+        final IndexSettings indexSettings,
+        final AnalysisRegistry analysisRegistry,
+        final EngineFactory engineFactory,
+        final Map<String, Function<IndexSettings, IndexStore>> indexStoreFactories) {
         this.indexSettings = indexSettings;
         this.analysisRegistry = analysisRegistry;
         this.engineFactory = Objects.requireNonNull(engineFactory);
@@ -263,12 +269,12 @@ public final class IndexModule {
     /**
      * Registers the given {@link Similarity} with the given name.
      * The function takes as parameters:<ul>
-     *   <li>settings for this similarity
-     *   <li>version of Elasticsearch when the index was created
-     *   <li>ScriptService, for script-based similarities
+     * <li>settings for this similarity
+     * <li>version of Elasticsearch when the index was created
+     * <li>ScriptService, for script-based similarities
      * </ul>
      *
-     * @param name Name of the SimilarityProvider
+     * @param name       Name of the SimilarityProvider
      * @param similarity SimilarityProvider to register
      */
     public void addSimilarity(String name, TriFunction<Settings, Version, ScriptService, Similarity> similarity) {
@@ -372,18 +378,18 @@ public final class IndexModule {
     }
 
     public IndexService newIndexService(
-            NodeEnvironment environment,
-            NamedXContentRegistry xContentRegistry,
-            IndexService.ShardStoreDeleter shardStoreDeleter,
-            CircuitBreakerService circuitBreakerService,
-            BigArrays bigArrays,
-            ThreadPool threadPool,
-            ScriptService scriptService,
-            Client client,
-            IndicesQueryCache indicesQueryCache,
-            MapperRegistry mapperRegistry,
-            IndicesFieldDataCache indicesFieldDataCache,
-            NamedWriteableRegistry namedWriteableRegistry)
+        NodeEnvironment environment,
+        NamedXContentRegistry xContentRegistry,
+        IndexService.ShardStoreDeleter shardStoreDeleter,
+        CircuitBreakerService circuitBreakerService,
+        BigArrays bigArrays,
+        ThreadPool threadPool,
+        ScriptService scriptService,
+        Client client,
+        IndicesQueryCache indicesQueryCache,
+        MapperRegistry mapperRegistry,
+        IndicesFieldDataCache indicesFieldDataCache,
+        NamedWriteableRegistry namedWriteableRegistry)
         throws IOException {
         final IndexEventListener eventListener = freeze();
         IndexSearcherWrapperFactory searcherWrapperFactory = indexSearcherWrapper.get() == null
@@ -405,11 +411,14 @@ public final class IndexModule {
                 queryCache = new DisabledQueryCache(indexSettings);
             }
             indexAnalyzers = analysisRegistry.build(indexSettings);
+
             final IndexService indexService = new IndexService(indexSettings, environment, xContentRegistry,
                 new SimilarityService(indexSettings, scriptService, similarities),
                 shardStoreDeleter, indexAnalyzers, engineFactory, circuitBreakerService, bigArrays, threadPool, scriptService,
                 client, queryCache, store, eventListener, searcherWrapperFactory, mapperRegistry,
                 indicesFieldDataCache, searchOperationListeners, indexOperationListeners, namedWriteableRegistry);
+
+            SourceLogger.info("newIndexService(),indexService={}", this.getClass().getName(), indexService);
             success = true;
             return indexService;
         } finally {
@@ -420,7 +429,7 @@ public final class IndexModule {
     }
 
     private static IndexStore getIndexStore(
-            final IndexSettings indexSettings, final Map<String, Function<IndexSettings, IndexStore>> indexStoreFactories) {
+        final IndexSettings indexSettings, final Map<String, Function<IndexSettings, IndexStore>> indexStoreFactories) {
         final String storeType = indexSettings.getValue(INDEX_STORE_TYPE_SETTING);
         final Type type;
         final Boolean allowMmap = NODE_STORE_ALLOW_MMAP.get(indexSettings.getNodeSettings());
@@ -457,10 +466,12 @@ public final class IndexModule {
      * doing so will result in an exception.
      */
     public MapperService newIndexMapperService(NamedXContentRegistry xContentRegistry, MapperRegistry mapperRegistry,
-            ScriptService scriptService) throws IOException {
+                                               ScriptService scriptService) throws IOException {
         return new MapperService(indexSettings, analysisRegistry.build(indexSettings), xContentRegistry,
             new SimilarityService(indexSettings, scriptService, similarities), mapperRegistry,
-            () -> { throw new UnsupportedOperationException("no index query shard context available"); });
+            () -> {
+                throw new UnsupportedOperationException("no index query shard context available");
+            });
     }
 
     /**

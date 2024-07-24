@@ -177,7 +177,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                             indexMetaData = alias.getWriteIndex();
                         }
                     }
-                    if (indexMetaData != null) {
+                    if (indexMetaData != null) { //如果索引存在
                         // Find the the default pipeline if one is defined from and existing index.
                         String defaultPipeline = IndexSettings.DEFAULT_PIPELINE.get(indexMetaData.getSettings());
                         indexRequest.setPipeline(defaultPipeline);

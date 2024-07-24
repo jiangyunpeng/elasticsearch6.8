@@ -1406,6 +1406,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                             Runnable onOperationRecovered) throws IOException {
         int opsRecovered = 0;
         Translog.Operation operation;
+        //从 Translog 中读取operation
         while ((operation = snapshot.next()) != null) {
             try {
                 logger.trace("[translog] recover op {}", operation);

@@ -57,10 +57,13 @@ import static java.util.Collections.emptyMap;
 public class IndexShardRoutingTable implements Iterable<ShardRouting> {
 
     final ShardShuffler shuffler;
+    // 当前分片信息，主要包含分片的编号、分片对应的索引信息
     final ShardId shardId;
-
+    // 当前分片的主分片信息
     final ShardRouting primary;
     final List<ShardRouting> primaryAsList;
+
+    // 当前分片的多个从分片列表
     final List<ShardRouting> replicas;
     final List<ShardRouting> shards;
     final List<ShardRouting> activeShards;

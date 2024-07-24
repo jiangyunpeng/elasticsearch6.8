@@ -35,6 +35,7 @@ import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.node.DiscoveryNodeFilters;
 import org.elasticsearch.cluster.routing.allocation.IndexMetaDataUpdater;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.collect.ImmutableOpenIntMap;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
@@ -1212,7 +1213,11 @@ public class IndexMetaData implements Diffable<IndexMetaData>, ToXContentFragmen
             }
 
             final String uuid = settings.get(SETTING_INDEX_UUID, INDEX_UUID_NA_VALUE);
-
+            SourceLogger.info("build IndexMetaData! index={}, version={} ,shards={}, replicas={} ",
+                index,
+                version,
+                numberOfShards,
+                numberOfReplicas);
             return new IndexMetaData(new Index(index, uuid), version, mappingVersion, settingsVersion, primaryTerms, state,
                 numberOfShards, numberOfReplicas, tmpSettings, mappings.build(), tmpAliases.build(), customMetaData.build(),
                 filledInSyncAllocationIds.build(), requireFilters, initialRecoveryFilters, includeFilters, excludeFilters,

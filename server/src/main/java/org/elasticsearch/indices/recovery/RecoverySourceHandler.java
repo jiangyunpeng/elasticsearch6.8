@@ -330,6 +330,7 @@ public class RecoverySourceHandler {
     }
 
     /**
+     * 执行
      * Perform phase1 of the recovery operations. Once this {@link IndexCommit}
      * snapshot has been performed no commit operations (files being fsync'd)
      * are effectively allowed on this index until all recovery phases are done

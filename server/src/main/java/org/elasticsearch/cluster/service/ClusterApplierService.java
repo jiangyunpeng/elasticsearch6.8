@@ -35,6 +35,7 @@ import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
@@ -330,6 +331,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         if (!lifecycle.started()) {
             return;
         }
+        SourceLogger.info("submitStateUpdateTask! source=[{}]",source);
         try {
             UpdateTask updateTask = new UpdateTask(config.priority(), source, new SafeClusterApplyListener(listener, logger), executor);
             if (config.timeout() != null) {
@@ -386,6 +388,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         final ClusterState newClusterState;
         try {
             newClusterState = task.apply(previousClusterState);
+            SourceLogger.info("update cluster state! previousClusterState={},newClusterState={}",previousClusterState.version(),newClusterState.version());
         } catch (Exception e) {
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(currentTimeInNanos() - startTimeNS)));
             if (logger.isTraceEnabled()) {
@@ -489,9 +492,11 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     }
 
     private void callClusterStateListeners(ClusterChangedEvent clusterChangedEvent) {
+        SourceLogger.info("call ClusterStateListeners");
         Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
             try {
                 logger.trace("calling [{}] with change to version [{}]", listener, clusterChangedEvent.state().version());
+                //SourceLogger.info("calling [{}] with change to version [{}]",listener, clusterChangedEvent.state().version());
                 listener.clusterChanged(clusterChangedEvent);
             } catch (Exception ex) {
                 logger.warn("failed to notify ClusterStateListener", ex);

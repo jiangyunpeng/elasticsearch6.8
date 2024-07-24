@@ -38,6 +38,7 @@ import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.text.Text;
@@ -48,6 +49,7 @@ import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.util.concurrent.PrioritizedEsThreadPoolExecutor;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.discovery.Discovery;
+import org.elasticsearch.index.translog.Translog.Source;
 import org.elasticsearch.threadpool.Scheduler;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -106,6 +108,7 @@ public class MasterService extends AbstractLifecycleComponent {
     protected synchronized void doStart() {
         Objects.requireNonNull(clusterStatePublisher, "please set a cluster state publisher before starting");
         Objects.requireNonNull(clusterStateSupplier, "please set a cluster state supplier before starting");
+        //初始化单线程，优先级队列的线程池
         threadPoolExecutor = EsExecutors.newSinglePrioritizing(
                 nodeName + "/" + MASTER_UPDATE_THREAD_NAME,
                 daemonThreadFactory(nodeName, MASTER_UPDATE_THREAD_NAME),
@@ -733,6 +736,7 @@ public class MasterService extends AbstractLifecycleComponent {
         if (!lifecycle.started()) {
             return;
         }
+        SourceLogger.info("submit cluster update task! source={}",source);
         final ThreadContext threadContext = threadPool.getThreadContext();
         final Supplier<ThreadContext.StoredContext> supplier = threadContext.newRestorableContext(true);
         try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {

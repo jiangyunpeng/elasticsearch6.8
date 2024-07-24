@@ -47,12 +47,16 @@ public final class ShardRouting implements Writeable, ToXContentObject {
     public static final long UNAVAILABLE_EXPECTED_SHARD_SIZE = -1;
 
     private final ShardId shardId;
+    // 分片所在的当前节点 id
     private final String currentNodeId;
     private final String relocatingNodeId;
+    // 是否是主分片
     private final boolean primary;
+    // 分片的状态，UNASSIGNED/INITIALIZING/STARTED/RELOCATING
     private final ShardRoutingState state;
     private final RecoverySource recoverySource;
     private final UnassignedInfo unassignedInfo;
+    // 每一个分片分配后都有一个唯一标识
     private final AllocationId allocationId;
     private final transient List<ShardRouting> asList;
     private final long expectedShardSize;

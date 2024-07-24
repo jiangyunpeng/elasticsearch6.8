@@ -35,6 +35,7 @@ import org.elasticsearch.cluster.routing.RoutingNode;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -120,21 +121,23 @@ public class IndicesStore implements ClusterStateListener, Closeable {
 
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
+        //如果路由表没有发生变化，则直接返回
         if (!event.routingTableChanged()) {
             return;
         }
-
+        //检查状态持久化是否被禁用
         if (event.state().blocks().disableStatePersistence()) {
             return;
         }
-
+        //获取路由表
         RoutingTable routingTable = event.state().routingTable();
 
         // remove entries from cache that don't exist in the routing table anymore (either closed or deleted indices)
         // - removing shard data of deleted indices is handled by IndicesClusterStateService
         // - closed indices don't need to be removed from the cache but we do it anyway for code simplicity
+        // 从缓存中移除不再存在于路由表中的条目（关闭或删除的索引）
         folderNotFoundCache.removeIf(shardId -> !routingTable.hasIndex(shardId.getIndex()));
-        // remove entries from cache which are allocated to this node
+        // 从缓存中移除分配到本节点的条目
         final String localNodeId = event.state().nodes().getLocalNodeId();
         RoutingNode localRoutingNode = event.state().getRoutingNodes().node(localNodeId);
         if (localRoutingNode != null) {
@@ -144,7 +147,7 @@ public class IndicesStore implements ClusterStateListener, Closeable {
         }
 
         for (IndexRoutingTable indexRoutingTable : routingTable) {
-            // Note, closed indices will not have any routing information, so won't be deleted
+
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
                 ShardId shardId = indexShardRoutingTable.shardId();
                 if (folderNotFoundCache.contains(shardId) == false && shardCanBeDeleted(localNodeId, indexShardRoutingTable)) {
@@ -158,6 +161,7 @@ public class IndicesStore implements ClusterStateListener, Closeable {
                     }
                     IndicesService.ShardDeletionCheckResult shardDeletionCheckResult =
                         indicesService.canDeleteShardContent(shardId, indexSettings);
+                    SourceLogger.info("check shard routing! shard={} , result={}",shardId,shardDeletionCheckResult);
                     switch (shardDeletionCheckResult) {
                         case FOLDER_FOUND_CAN_DELETE:
                             deleteShardIfExistElseWhere(event.state(), indexShardRoutingTable);

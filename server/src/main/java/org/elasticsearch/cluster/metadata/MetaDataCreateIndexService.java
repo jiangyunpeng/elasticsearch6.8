@@ -48,6 +48,7 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.ValidationException;
@@ -228,6 +229,7 @@ public class MetaDataCreateIndexService {
         Settings build = updatedSettingsBuilder.put(request.settings()).normalizePrefix(IndexMetaData.INDEX_SETTING_PREFIX).build();
         indexScopedSettings.validate(build, true); // we do validate here - index setting must be consistent
         request.settings(build);
+        SourceLogger.info("submitStateUpdateTask for create index {} cause [{}]", request.index(),request.cause());
         clusterService.submitStateUpdateTask(
                 "create-index [" + request.index() + "], cause [" + request.cause() + "]",
                 new IndexCreationTask(
@@ -286,14 +288,15 @@ public class MetaDataCreateIndexService {
             String removalExtraInfo = null;
             IndexRemovalReason removalReason = IndexRemovalReason.FAILURE;
             try {
+                // 验证请求
                 validator.validate(request, currentState);
-
                 for (Alias alias : request.aliases()) {
                     aliasValidator.validateAlias(alias, request.index(), currentState.metaData());
                 }
 
                 // we only find a template when its an API call (a new index)
                 // find templates, highest order are better matching
+                // 查找并应用索引模板
                 List<IndexTemplateMetaData> templates =
                         MetaDataIndexTemplateService.findTemplates(currentState.metaData(), request.index());
 
@@ -309,7 +312,7 @@ public class MetaDataCreateIndexService {
                 for (Map.Entry<String, String> entry : request.mappings().entrySet()) {
                     mappings.put(entry.getKey(), MapperService.parseMapping(xContentRegistry, entry.getValue()));
                 }
-
+                // 合并模板中的映射和别名
                 final Index recoverFromIndex = request.recoverFrom();
 
                 if (recoverFromIndex == null) {
@@ -348,7 +351,7 @@ public class MetaDataCreateIndexService {
                                     MapperService.parseMapping(xContentRegistry, mappingString));
                             }
                         }
-                        //handle aliases
+                        //处理模板中的别名
                         for (ObjectObjectCursor<String, AliasMetaData> cursor : template.aliases()) {
                             AliasMetaData aliasMetaData = cursor.value;
                             //if an alias with same name came with the create index request itself,
@@ -373,6 +376,7 @@ public class MetaDataCreateIndexService {
                         }
                     }
                 }
+                // 构建索引设置
                 Settings.Builder indexSettingsBuilder = Settings.builder();
                 if (recoverFromIndex == null) {
                     // apply templates, here, in reverse order, since first ones are better matching
@@ -380,7 +384,7 @@ public class MetaDataCreateIndexService {
                         indexSettingsBuilder.put(templates.get(i).settings());
                     }
                 }
-                // now, put the request settings, so they override templates
+                // 合并请求中settings，合并模板中的settings
                 indexSettingsBuilder.put(request.settings());
                 if (indexSettingsBuilder.get(SETTING_NUMBER_OF_SHARDS) == null) {
                     deprecationLogger.deprecated("the default number of shards will change from [5] to [1] in 7.0.0; "
@@ -422,6 +426,7 @@ public class MetaDataCreateIndexService {
                 indexSettingsBuilder.remove(IndexMetaData.INDEX_NUMBER_OF_ROUTING_SHARDS_SETTING.getKey());
                 tmpImdBuilder.setRoutingNumShards(routingNumShards);
 
+                //处理索引恢复
                 if (recoverFromIndex != null) {
                     assert request.resizeType() != null;
                     prepareResizeIndexSettings(
@@ -462,6 +467,7 @@ public class MetaDataCreateIndexService {
                     }
                 }
                 // Set up everything, now locally create the index to see that things are ok, and apply
+                // 创建临时 IndexMetaData
                 final IndexMetaData tmpImd = tmpImdBuilder.build();
                 ActiveShardCount waitForActiveShards = request.waitForActiveShards();
                 if (waitForActiveShards == ActiveShardCount.DEFAULT) {
@@ -473,6 +479,7 @@ public class MetaDataCreateIndexService {
                         (tmpImd.getNumberOfReplicas() + 1) + "]");
                 }
                 // create the index here (on the master) to validate it can be created, as well as adding the mapping
+                // 创建 IndexService
                 final IndexService indexService = indicesService.createIndex(tmpImd, Collections.emptyList());
                 createdIndex = indexService.index();
                 // now add the mappings
@@ -516,6 +523,7 @@ public class MetaDataCreateIndexService {
                     mappingsMetaData.put(mapper.type(), mappingMd);
                 }
 
+                //构建正式 IndexMetaData.Builder
                 final IndexMetaData.Builder indexMetaDataBuilder = IndexMetaData.builder(request.index())
                     .settings(actualIndexSettings)
                     .setRoutingNumShards(routingNumShards);
@@ -523,7 +531,7 @@ public class MetaDataCreateIndexService {
                 for (int shardId = 0; shardId < tmpImd.getNumberOfShards(); shardId++) {
                     indexMetaDataBuilder.primaryTerm(shardId, tmpImd.primaryTerm(shardId));
                 }
-
+                //设置mapping
                 for (MappingMetaData mappingMd : mappingsMetaData.values()) {
                     indexMetaDataBuilder.putMapping(mappingMd);
                 }
@@ -542,7 +550,7 @@ public class MetaDataCreateIndexService {
                 }
 
                 indexMetaDataBuilder.state(request.state());
-
+                // 构建索引元数据
                 final IndexMetaData indexMetaData;
                 try {
                     indexMetaData = indexMetaDataBuilder.build();
@@ -562,6 +570,7 @@ public class MetaDataCreateIndexService {
                     request.index(), request.cause(), templateNames, indexMetaData.getNumberOfShards(),
                     indexMetaData.getNumberOfReplicas(), mappings.keySet());
 
+
                 ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
                 if (!request.blocks().isEmpty()) {
                     for (ClusterBlock block : request.blocks()) {
@@ -570,8 +579,9 @@ public class MetaDataCreateIndexService {
                 }
                 blocks.updateBlocks(indexMetaData);
 
+                // 构建并更新集群状态
                 ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).metaData(newMetaData).build();
-
+                //如果索引状态为打开，重新路由分片
                 if (request.state() == State.OPEN) {
                     RoutingTable.Builder routingTableBuilder = RoutingTable.builder(updatedState.routingTable())
                         .addAsNew(updatedState.metaData().index(request.index()));

@@ -36,6 +36,7 @@ import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Setting;
@@ -199,6 +200,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
     }
 
     private void performStateRecovery(boolean enforceRecoverAfterTime, String reason) {
+        SourceLogger.info("performStateRecovery! reason={}",reason);
         final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener();
 
         if (enforceRecoverAfterTime && recoverAfterTime != null) {
@@ -236,21 +238,24 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
         @Override
         public void onSuccess(final ClusterState recoveredState) {
             logger.trace("successful state recovery, importing cluster state...");
+            SourceLogger.info("successful state recovery, submit ClusterStateUpdateTask");
+
             clusterService.submitStateUpdateTask("local-gateway-elected-state", new ClusterStateUpdateTask() {
                 @Override
                 public ClusterState execute(ClusterState currentState) {
                     assert currentState.metaData().indices().isEmpty();
 
-                    // remove the block, since we recovered from gateway
+                    //移除全局阻塞，从gateway恢复
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder()
                             .blocks(currentState.blocks())
                             .blocks(recoveredState.blocks())
                             .removeGlobalBlock(STATE_NOT_RECOVERED_BLOCK);
 
                     MetaData.Builder metaDataBuilder = MetaData.builder(recoveredState.metaData());
-                    // automatically generate a UID for the metadata if we need to
+                    // 如果需要，自动生成一个 UID 给元数据
                     metaDataBuilder.generateClusterUuidIfNeeded();
 
+                    // 如果集群设置为只读或允许删除的只读模式，添加相应的全局阻塞
                     if (MetaData.SETTING_READ_ONLY_SETTING.get(recoveredState.metaData().settings())
                         || MetaData.SETTING_READ_ONLY_SETTING.get(currentState.metaData().settings())) {
                         blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_BLOCK);
@@ -260,26 +265,28 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
                         blocks.addGlobalBlock(MetaData.CLUSTER_READ_ONLY_ALLOW_DELETE_BLOCK);
                     }
 
+                    // 更新元数据和阻塞：将恢复的索引元数据加入集群元数据，并添加相应的阻塞
                     for (IndexMetaData indexMetaData : recoveredState.metaData()) {
                         metaDataBuilder.put(indexMetaData, false);
                         blocks.addBlocks(indexMetaData);
                     }
 
-                    // update the state to reflect the new metadata and routing
+                    // 更新集群状态以反映新的元数据和路由
                     ClusterState updatedState = ClusterState.builder(currentState)
                             .blocks(blocks)
                             .metaData(metaDataBuilder)
                             .build();
 
-                    // initialize all index routing tables as empty
+                    // 初始化所有索引路由表为空
                     RoutingTable.Builder routingTableBuilder = RoutingTable.builder(updatedState.routingTable());
                     for (ObjectCursor<IndexMetaData> cursor : updatedState.metaData().indices().values()) {
                         routingTableBuilder.addAsRecovery(cursor.value);
                     }
-                    // start with 0 based versions for routing table
+
+                    // 为路由表设置初始版本号为0
                     routingTableBuilder.version(0);
 
-                    // now, reroute
+                    // 重新路由
                     updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder.build()).build();
                     return allocationService.reroute(updatedState, "state recovered");
                 }

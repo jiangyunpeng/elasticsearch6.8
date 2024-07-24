@@ -39,6 +39,7 @@ import org.elasticsearch.cluster.routing.UnassignedInfo.AllocationStatus;
 import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
 import org.elasticsearch.cluster.routing.allocation.command.AllocationCommands;
 import org.elasticsearch.cluster.routing.allocation.decider.AllocationDeciders;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.gateway.GatewayAllocator;
 
@@ -259,7 +260,7 @@ public class AllocationService {
                 for (final String index : indices) {
                     final IndexMetaData indexMetaData = metaDataBuilder.get(index);
                     final IndexMetaData.Builder indexMetaDataBuilder =
-                            new IndexMetaData.Builder(indexMetaData).settingsVersion(1 + indexMetaData.getSettingsVersion());
+                        new IndexMetaData.Builder(indexMetaData).settingsVersion(1 + indexMetaData.getSettingsVersion());
                     metaDataBuilder.put(indexMetaDataBuilder);
                 }
                 logger.info("updating number_of_replicas to [{}] for indices {}", numberOfReplicas, indices);
@@ -285,8 +286,8 @@ public class AllocationService {
                     metaData.getIndexSafe(shardRouting.index()).getSettings());
                 if (newComputedLeftDelayNanos == 0) {
                     unassignedIterator.updateUnassigned(new UnassignedInfo(unassignedInfo.getReason(), unassignedInfo.getMessage(),
-                        unassignedInfo.getFailure(), unassignedInfo.getNumFailedAllocations(), unassignedInfo.getUnassignedTimeInNanos(),
-                        unassignedInfo.getUnassignedTimeInMillis(), false, unassignedInfo.getLastAllocationStatus()),
+                            unassignedInfo.getFailure(), unassignedInfo.getNumFailedAllocations(), unassignedInfo.getUnassignedTimeInNanos(),
+                            unassignedInfo.getUnassignedTimeInMillis(), false, unassignedInfo.getLastAllocationStatus()),
                         shardRouting.recoverySource(), allocation.changes());
                 }
             }
@@ -320,10 +321,10 @@ public class AllocationService {
     private <T> String firstListElementsToCommaDelimitedString(List<T> elements, Function<T, String> formatter) {
         final int maxNumberOfElements = 10;
         return elements
-                .stream()
-                .limit(maxNumberOfElements)
-                .map(formatter)
-                .collect(Collectors.joining(", "));
+            .stream()
+            .limit(maxNumberOfElements)
+            .map(formatter)
+            .collect(Collectors.joining(", "));
     }
 
     public CommandsResult reroute(final ClusterState clusterState, AllocationCommands commands, boolean explain, boolean retryFailed) {
@@ -375,6 +376,8 @@ public class AllocationService {
         RoutingAllocation allocation = new RoutingAllocation(allocationDeciders, routingNodes, fixedClusterState,
             clusterInfoService.getClusterInfo(), currentNanoTime());
         allocation.debugDecision(debug);
+        SourceLogger.info("reroute cause={} , allocation={}", reason, allocation);
+        //重新分片
         reroute(allocation);
         if (fixedClusterState == clusterState && allocation.routingNodesChanged() == false) {
             return clusterState;
@@ -455,7 +458,9 @@ public class AllocationService {
         return routingNodes;
     }
 
-    /** override this to control time based decisions during allocation */
+    /**
+     * override this to control time based decisions during allocation
+     */
     protected long currentNanoTime() {
         return System.nanoTime();
     }
@@ -472,6 +477,7 @@ public class AllocationService {
 
         /**
          * Creates a new {@link CommandsResult}
+         *
          * @param explanations Explanation for the reroute actions
          * @param clusterState Resulting cluster state
          */

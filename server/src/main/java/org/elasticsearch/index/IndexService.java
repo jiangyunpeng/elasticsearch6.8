@@ -32,6 +32,7 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
@@ -349,7 +350,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
                     throw ex;
                 }
             }
-
+            SourceLogger.info("execute createShard path={}", path);
             if (path == null) {
                 // TODO: we should, instead, hold a "bytes reserved" of how large we anticipate this shard will be, e.g. for a shard
                 // that's being relocated/replicated we know how large it will become once it's done copying:
