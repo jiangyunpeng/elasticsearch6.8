@@ -24,6 +24,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.coordination.CoordinationMetaData.VotingConfiguration;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.common.SourceLogger;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -174,8 +175,15 @@ public class CoordinationState {
      * @throws CoordinationStateRejectedException if the arguments were incompatible with the current state of this object.
      */
     public Join handleStartJoin(StartJoinRequest startJoinRequest) {
+        SourceLogger.info(this.getClass(), "handleStartJoin,sourceNode={},joinRequestTerm={},currentTerm={},lastAcceptedTerm={}",
+            startJoinRequest.getSourceNode(),
+            startJoinRequest.getTerm(),
+            getCurrentTerm(),
+            getLastAcceptedTerm());
+
+        //如果收到的term小于或等于当前term，忽略
         if (startJoinRequest.getTerm() <= getCurrentTerm()) {
-            logger.debug("handleStartJoin: ignoring [{}] as term provided is not greater than current term [{}]",
+            SourceLogger.info(this.getClass()," handleStartJoin: ignoring [{}] as term provided is not greater than current term [{}]",
                 startJoinRequest, getCurrentTerm());
             throw new CoordinationStateRejectedException("incoming term " + startJoinRequest.getTerm() +
                 " not greater than current term " + getCurrentTerm());
@@ -204,6 +212,12 @@ public class CoordinationState {
         joinVotes = new VoteCollection();
         publishVotes = new VoteCollection();
 
+        SourceLogger.info(this.getClass(), "create Join,sourceNode={},currentTerTerm={},lastAcceptedTerm={}",
+            startJoinRequest.getSourceNode(),
+            getCurrentTerm(),
+            getLastAcceptedTerm());
+
+        //创建Join时，sourceNode=localNode,target=startJoinRequest.getSourceNode()
         return new Join(localNode, startJoinRequest.getSourceNode(), getCurrentTerm(), getLastAcceptedTerm(),
             getLastAcceptedVersionOrMetaDataVersion());
     }
@@ -217,29 +231,30 @@ public class CoordinationState {
      */
     public boolean handleJoin(Join join) {
         assert join.targetMatches(localNode) : "handling join " + join + " for the wrong node " + localNode;
+        SourceLogger.info(this.getClass(), "handling join [{}] lastAcceptedTerm={}",join,getLastAcceptedTerm());
 
         if (join.getTerm() != getCurrentTerm()) {
-            logger.debug("handleJoin: ignored join due to term mismatch (expected: [{}], actual: [{}])",
+            SourceLogger.info("handleJoin: ignored join due to term mismatch (expected: [{}], actual: [{}])",
                 getCurrentTerm(), join.getTerm());
             throw new CoordinationStateRejectedException(
                 "incoming term " + join.getTerm() + " does not match current term " + getCurrentTerm());
         }
 
         if (startedJoinSinceLastReboot == false) {
-            logger.debug("handleJoin: ignored join as term was not incremented yet after reboot");
+            SourceLogger.info("handleJoin: ignored join as term was not incremented yet after reboot");
             throw new CoordinationStateRejectedException("ignored join as term has not been incremented yet after reboot");
         }
 
         final long lastAcceptedTerm = getLastAcceptedTerm();
         if (join.getLastAcceptedTerm() > lastAcceptedTerm) {
-            logger.debug("handleJoin: ignored join as joiner has a better last accepted term (expected: <=[{}], actual: [{}])",
+            SourceLogger.info("handleJoin: ignored join as joiner has a better last accepted term (expected: <=[{}], actual: [{}])",
                 lastAcceptedTerm, join.getLastAcceptedTerm());
             throw new CoordinationStateRejectedException("incoming last accepted term " + join.getLastAcceptedTerm() +
                 " of join higher than current last accepted term " + lastAcceptedTerm);
         }
 
         if (join.getLastAcceptedTerm() == lastAcceptedTerm && join.getLastAcceptedVersion() > getLastAcceptedVersionOrMetaDataVersion()) {
-            logger.debug(
+            SourceLogger.info(
                 "handleJoin: ignored join as joiner has a better last accepted version (expected: <=[{}], actual: [{}]) in term {}",
                 getLastAcceptedVersionOrMetaDataVersion(), join.getLastAcceptedVersion(), lastAcceptedTerm);
             throw new CoordinationStateRejectedException("incoming last accepted version " + join.getLastAcceptedVersion() +
@@ -255,9 +270,11 @@ public class CoordinationState {
             logger.debug("handleJoin: rejecting join since this node has not received its initial configuration yet");
             throw new CoordinationStateRejectedException("rejecting join since this node has not received its initial configuration yet");
         }
+        //SourceLogger.info(this.getClass(),"accept join {}",join);
 
         boolean added = joinVotes.addJoinVote(join);
         boolean prevElectionWon = electionWon;
+        //计算选举的法定人数
         electionWon = isElectionQuorum(joinVotes);
         assert !prevElectionWon || electionWon : // we cannot go from won to not won
             "locaNode= " + localNode + ", join=" + join + ", joinVotes=" + joinVotes;
@@ -307,6 +324,7 @@ public class CoordinationState {
             logger.debug("handleClientValue: only allow reconfiguration while not already reconfiguring");
             throw new CoordinationStateRejectedException("only allow reconfiguration while not already reconfiguring");
         }
+        //变更集群配置需要检查当前节点是否满足法定人数
         if (joinVotesHaveQuorumFor(clusterState.getLastAcceptedConfiguration()) == false) {
             logger.debug("handleClientValue: only allow reconfiguration if joinVotes have quorum for new config");
             throw new CoordinationStateRejectedException("only allow reconfiguration if joinVotes have quorum for new config");
@@ -320,7 +338,6 @@ public class CoordinationState {
         publishVotes = new VoteCollection();
 
         logger.trace("handleClientValue: processing request for version [{}] and term [{}]", lastPublishedVersion, getCurrentTerm());
-
         return new PublishRequest(clusterState);
     }
 
@@ -333,12 +350,14 @@ public class CoordinationState {
      */
     public PublishResponse handlePublishRequest(PublishRequest publishRequest) {
         final ClusterState clusterState = publishRequest.getAcceptedState();
+        //必须是相同term
         if (clusterState.term() != getCurrentTerm()) {
             logger.debug("handlePublishRequest: ignored publish request due to term mismatch (expected: [{}], actual: [{}])",
                 getCurrentTerm(), clusterState.term());
             throw new CoordinationStateRejectedException("incoming term " + clusterState.term() + " does not match current term " +
                 getCurrentTerm());
         }
+        //如果收到的version小于当前version
         if (clusterState.term() == getLastAcceptedTerm() && clusterState.version() <= getLastAcceptedVersion()) {
             if (clusterState.term() == ZEN1_BWC_TERM
                 && clusterState.nodes().getMasterNode().equals(getLastAcceptedState().nodes().getMasterNode()) == false) {
@@ -351,9 +370,7 @@ public class CoordinationState {
                     " lower or equal to current version " + getLastAcceptedVersion());
             }
         }
-
-        logger.trace("handlePublishRequest: accepting publish request for version [{}] and term [{}]",
-            clusterState.version(), clusterState.term());
+        final DiscoveryNode sourceNode = publishRequest.getAcceptedState().nodes().getMasterNode();
         persistedState.setLastAcceptedState(clusterState);
         assert getLastAcceptedState() == clusterState;
 
@@ -387,12 +404,12 @@ public class CoordinationState {
                 " does not match current version " + lastPublishedVersion);
         }
 
-        logger.trace("handlePublishResponse: accepted publish response for version [{}] and term [{}] from [{}]",
+        SourceLogger.info(this.getClass(),"handlePublishResponse: accepted publish response for version [{}] and term [{}] from [{}] ",
             publishResponse.getVersion(), publishResponse.getTerm(), sourceNode);
+
         publishVotes.addVote(sourceNode);
         if (isPublishQuorum(publishVotes)) {
-            logger.trace("handlePublishResponse: value committed for version [{}] and term [{}]",
-                publishResponse.getVersion(), publishResponse.getTerm());
+            SourceLogger.info(this.getClass(),"handlePublishResponse: PublishQuorum -> true");
             return Optional.of(new ApplyCommitRequest(localNode, publishResponse.getTerm(), publishResponse.getVersion()));
         }
 
@@ -406,6 +423,15 @@ public class CoordinationState {
      * @throws CoordinationStateRejectedException if the arguments were incompatible with the current state of this object.
      */
     public void handleCommit(ApplyCommitRequest applyCommit) {
+        SourceLogger.info(this.getClass(),"handle commit request term:[{}]/[{}]/[{}] version:[{}]/[{}]",
+            applyCommit.getTerm(),
+            getCurrentTerm(),
+            getLastAcceptedTerm(),
+            applyCommit.getVersion(),
+            getLastAcceptedVersion()
+            );
+
+        //检查CurrentTerm
         if (applyCommit.getTerm() != getCurrentTerm()) {
             logger.debug("handleCommit: ignored commit request due to term mismatch " +
                     "(expected: [term {} version {}], actual: [term {} version {}])",
@@ -413,6 +439,7 @@ public class CoordinationState {
             throw new CoordinationStateRejectedException("incoming term " + applyCommit.getTerm() + " does not match current term " +
                 getCurrentTerm());
         }
+        //检查LastAcceptedTerm
         if (applyCommit.getTerm() != getLastAcceptedTerm()) {
             logger.debug("handleCommit: ignored commit request due to term mismatch " +
                     "(expected: [term {} version {}], actual: [term {} version {}])",
@@ -420,6 +447,7 @@ public class CoordinationState {
             throw new CoordinationStateRejectedException("incoming term " + applyCommit.getTerm() + " does not match last accepted term " +
                 getLastAcceptedTerm());
         }
+        //检查version
         if (applyCommit.getVersion() != getLastAcceptedVersion()) {
             logger.debug("handleCommit: ignored commit request due to version mismatch (term {}, expected: [{}], actual: [{}])",
                 getLastAcceptedTerm(), getLastAcceptedVersion(), applyCommit.getVersion());
@@ -486,12 +514,14 @@ public class CoordinationState {
          * marked as committed.
          */
         default void markLastAcceptedStateAsCommitted() {
+            SourceLogger.info(this.getClass(),"markLastAcceptedStateAsCommitted");
+            //返回最近接受的状态,也就是publish时设置的state
             final ClusterState lastAcceptedState = getLastAcceptedState();
             MetaData.Builder metaDataBuilder = null;
             if (lastAcceptedState.getLastAcceptedConfiguration().equals(lastAcceptedState.getLastCommittedConfiguration()) == false) {
                 final CoordinationMetaData coordinationMetaData = CoordinationMetaData.builder(lastAcceptedState.coordinationMetaData())
-                        .lastCommittedConfiguration(lastAcceptedState.getLastAcceptedConfiguration())
-                        .build();
+                    .lastCommittedConfiguration(lastAcceptedState.getLastAcceptedConfiguration())
+                    .build();
                 metaDataBuilder = MetaData.builder(lastAcceptedState.metaData());
                 metaDataBuilder.coordinationMetaData(coordinationMetaData);
             }
@@ -499,15 +529,18 @@ public class CoordinationState {
             assert lastAcceptedState.metaData().clusterUUID().equals(MetaData.UNKNOWN_CLUSTER_UUID) == false ||
                 lastAcceptedState.term() == ZEN1_BWC_TERM :
                 "received cluster state with empty cluster uuid but not Zen1 BWC term: " + lastAcceptedState;
+
+            //如果uuid还没有commit
             if (lastAcceptedState.metaData().clusterUUID().equals(MetaData.UNKNOWN_CLUSTER_UUID) == false &&
                 lastAcceptedState.metaData().clusterUUIDCommitted() == false) {
                 if (metaDataBuilder == null) {
                     metaDataBuilder = MetaData.builder(lastAcceptedState.metaData());
                 }
                 metaDataBuilder.clusterUUIDCommitted(true);
-                logger.info("cluster UUID set to [{}]", lastAcceptedState.metaData().clusterUUID());
+                SourceLogger.info("handle commit: cluster UUID [{}] committed", lastAcceptedState.metaData().clusterUUID());
             }
             if (metaDataBuilder != null) {
+                //修改LastAcceptedState
                 setLastAcceptedState(ClusterState.builder(lastAcceptedState).metaData(metaDataBuilder).build());
             }
         }
@@ -517,18 +550,25 @@ public class CoordinationState {
     }
 
     /**
+     * 代表一个投票集合，投票可以是Nodes(Peer阶段), 也可以Join请求
      * A collection of votes, used to calculate quorums. Optionally records the Joins as well.
      */
     public static class VoteCollection {
 
-        private final Map<String, DiscoveryNode> nodes;
-        private final Set<Join> joins;
+        private final Map<String, DiscoveryNode> nodes;//节点信息
+        private final Set<Join> joins;//一个节点加入集群的请求
 
         public boolean addVote(DiscoveryNode sourceNode) {
-            return sourceNode.isMasterNode() && nodes.put(sourceNode.getId(), sourceNode) == null;
+            boolean ret= sourceNode.isMasterNode() && nodes.put(sourceNode.getId(), sourceNode) == null;
+            SourceLogger.info(this.getClass(),"addVote! node:[{}], master:[{}], nodes=[{}]",
+                sourceNode.getHostName(),
+                sourceNode.isMasterNode(),
+                nodes);
+            return ret;
         }
 
         public boolean addJoinVote(Join join) {
+            //注意投票是SourceNode
             final boolean added = addVote(join.getSourceNode());
             if (added) {
                 joins.add(join);

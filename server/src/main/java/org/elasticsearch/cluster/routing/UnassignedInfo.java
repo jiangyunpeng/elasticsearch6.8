@@ -139,11 +139,13 @@ public final class UnassignedInfo implements ToXContentFragment, Writeable {
     public enum AllocationStatus implements Writeable {
         /**
          * The shard was denied allocation to a node because the allocation deciders all returned a NO decision
+         * 表示分配决策者（deciders）中的一个或多个拒绝了分片的分配
          */
         DECIDERS_NO((byte) 0),
         /**
          * The shard was denied allocation to a node because there were no valid shard copies found for it;
          * this can happen on node restart with gateway allocation
+         * 表示没有找到有效的分片副本以供分配
          */
         NO_VALID_SHARD_COPY((byte) 1),
         /**
@@ -152,6 +154,7 @@ public final class UnassignedInfo implements ToXContentFragment, Writeable {
         DECIDERS_THROTTLED((byte) 2),
         /**
          * Waiting on getting shard data from all nodes before making a decision about where to allocate the shard
+         * 表示正在从远程节点或其他来源获取分片的数据
          */
         FETCHING_SHARD_DATA((byte) 3),
         /**

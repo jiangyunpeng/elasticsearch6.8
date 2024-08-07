@@ -36,6 +36,7 @@ import org.elasticsearch.cluster.routing.allocation.AllocateUnassignedDecision;
 import org.elasticsearch.cluster.routing.allocation.FailedShard;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
@@ -124,15 +125,24 @@ public class GatewayAllocator {
     protected static void innerAllocatedUnassigned(RoutingAllocation allocation,
                                                    PrimaryShardAllocator primaryShardAllocator,
                                                    ReplicaShardAllocator replicaShardAllocator) {
+
         RoutingNodes.UnassignedShards unassigned = allocation.routingNodes().unassigned();
         unassigned.sort(PriorityComparator.getAllocationComparator(allocation)); // sort for priority ordering
+        SourceLogger.info(GatewayAllocator.class, "innerAllocatedUnassigned begin !");
 
+        //主分片分配器
         primaryShardAllocator.allocateUnassigned(allocation);
+
+        //如果存在InactiveShards
         if (allocation.routingNodes().hasInactiveShards()) {
             // cancel existing recoveries if we have a better match
             replicaShardAllocator.processExistingRecoveries(allocation);
         }
+
+        //副本分片分配器
         replicaShardAllocator.allocateUnassigned(allocation);
+
+        SourceLogger.info(GatewayAllocator.class, "innerAllocatedUnassigned end !");
     }
 
     /**
@@ -195,7 +205,7 @@ public class GatewayAllocator {
 
         @Override
         protected void reroute(ShardId shardId, String reason) {
-            logger.trace("{} scheduling reroute for {}", shardId, reason);
+            SourceLogger.info(this.getClass(), "scheduling reroute shardId:[{}] for {}", shardId, reason);
             assert rerouteService != null;
             rerouteService.reroute("async_shard_fetch", Priority.HIGH, ActionListener.wrap(
                 r -> logger.trace("{} scheduled reroute completed for {}", shardId, reason),
@@ -213,14 +223,19 @@ public class GatewayAllocator {
 
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards>
-                                                                        fetchData(ShardRouting shard, RoutingAllocation allocation) {
+        fetchData(ShardRouting shard, RoutingAllocation allocation) {
+            SourceLogger.info(InternalAsyncFetch.class, "async fetch shard! index=[{}], shardId=[{}]", shard.index().getName(), shard.shardId());
+
+            //① 创建InternalAsyncFetch
             AsyncShardFetch<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards> fetch =
                 asyncFetchStarted.computeIfAbsent(shard.shardId(),
                     shardId -> new InternalAsyncFetch<>(logger, "shard_started", shardId,
                         IndexMetaData.INDEX_DATA_PATH_SETTING.get(allocation.metaData().index(shard.index()).getSettings()),
                         startedAction));
+
+            //② 调用fetchData()方法获取shard信息
             AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards> shardState =
-                    fetch.fetchData(allocation.nodes(), allocation.getIgnoreNodes(shard.shardId()));
+                fetch.fetchData(allocation.nodes(), allocation.getIgnoreNodes(shard.shardId()));
 
             if (shardState.hasData()) {
                 shardState.processAllocation(allocation);
@@ -239,13 +254,13 @@ public class GatewayAllocator {
 
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetaData.NodeStoreFilesMetaData>
-                                                                        fetchData(ShardRouting shard, RoutingAllocation allocation) {
+        fetchData(ShardRouting shard, RoutingAllocation allocation) {
             AsyncShardFetch<TransportNodesListShardStoreMetaData.NodeStoreFilesMetaData> fetch =
                 asyncFetchStore.computeIfAbsent(shard.shardId(),
                     shardId -> new InternalAsyncFetch<>(logger, "shard_store", shard.shardId(),
                         IndexMetaData.INDEX_DATA_PATH_SETTING.get(allocation.metaData().index(shard.index()).getSettings()), storeAction));
             AsyncShardFetch.FetchResult<TransportNodesListShardStoreMetaData.NodeStoreFilesMetaData> shardStores =
-                    fetch.fetchData(allocation.nodes(), allocation.getIgnoreNodes(shard.shardId()));
+                fetch.fetchData(allocation.nodes(), allocation.getIgnoreNodes(shard.shardId()));
             if (shardStores.hasData()) {
                 shardStores.processAllocation(allocation);
             }

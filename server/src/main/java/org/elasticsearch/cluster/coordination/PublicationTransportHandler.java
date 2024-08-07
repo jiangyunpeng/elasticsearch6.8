@@ -30,6 +30,7 @@ import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.IncompatibleClusterStateVersionException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.Compressor;
 import org.elasticsearch.common.compress.CompressorFactory;
@@ -177,6 +178,7 @@ public class PublicationTransportHandler {
         // sadly this is not water tight as it may that a failed diff based publishing to a node
         // will cause a full serialization based on an older version, which may fail after the
         // change has been committed.
+        //计算增量,会修改 serializedDiffs、serializedStates
         buildDiffAndSerializeStates(clusterChangedEvent.state(), clusterChangedEvent.previousState(),
             nodes, sendFullVersion, serializedStates, serializedDiffs);
 
@@ -208,10 +210,12 @@ public class PublicationTransportHandler {
                 } else {
                     responseActionListener = originalListener;
                 }
+                //如果目标不在集群列表中,发送完全版本
                 if (sendFullVersion || !previousState.nodes().nodeExists(destination)) {
                     logger.trace("sending full cluster state version {} to {}", newState.version(), destination);
                     PublicationTransportHandler.this.sendFullClusterState(newState, serializedStates, destination, responseActionListener);
                 } else {
+                    //否则发送增量版本
                     logger.trace("sending cluster state diff for version {} to {}", newState.version(), destination);
                     PublicationTransportHandler.this.sendClusterStateDiff(newState, serializedDiffs, serializedStates, destination,
                         responseActionListener);
@@ -230,6 +234,7 @@ public class PublicationTransportHandler {
                     actionName = COMMIT_STATE_ACTION_NAME;
                     transportRequest = applyCommitRequest;
                 }
+                SourceLogger.info(PublicationContext.class,"sendApplyCommit action[{}] to [{}]",COMMIT_STATE_ACTION_NAME,destination);
                 transportService.sendRequest(destination, actionName, transportRequest, stateRequestOptions,
                     new TransportResponseHandler<TransportResponse.Empty>() {
 
@@ -306,6 +311,10 @@ public class PublicationTransportHandler {
                 actionName = PUBLISH_STATE_ACTION_NAME;
                 transportResponseHandler = publishWithJoinResponseHandler;
             }
+            SourceLogger.info(this.getClass(),"send action[{}] with cluster [{}] state to node[{}]",
+                actionName,
+                sendDiffs?"diff":"full",
+                node);
             transportService.sendRequest(node, actionName, request, stateRequestOptions, transportResponseHandler);
         } catch (Exception e) {
             logger.warn(() -> new ParameterizedMessage("error sending cluster state to {}", node), e);
@@ -383,6 +392,8 @@ public class PublicationTransportHandler {
     }
 
     private PublishWithJoinResponse handleIncomingPublishRequest(BytesTransportRequest request) throws IOException {
+        SourceLogger.info(this.getClass(),"receive publish request from leader");
+
         final Compressor compressor = CompressorFactory.compressor(request.bytes());
         StreamInput in = request.bytes().streamInput();
         try {
@@ -415,6 +426,7 @@ public class PublicationTransportHandler {
                 } else {
                     ClusterState incomingState;
                     try {
+                        //读取集群增量
                         Diff<ClusterState> diff = ClusterState.readDiffFrom(in, lastSeen.nodes().getLocalNode());
                         incomingState = diff.apply(lastSeen); // might throw IncompatibleClusterStateVersionException
                     } catch (IncompatibleClusterStateVersionException e) {
@@ -427,6 +439,7 @@ public class PublicationTransportHandler {
                     compatibleClusterStateDiffReceivedCount.incrementAndGet();
                     logger.debug("received diff cluster state version [{}] with uuid [{}], diff size [{}]",
                         incomingState.version(), incomingState.stateUUID(), request.bytes().length());
+                    //接受新收到state
                     final PublishWithJoinResponse response = acceptState(incomingState);
                     lastSeenClusterState.compareAndSet(lastSeen, incomingState);
                     return response;
@@ -439,14 +452,18 @@ public class PublicationTransportHandler {
 
     private PublishWithJoinResponse acceptState(ClusterState incomingState) {
         // if the state is coming from the current node, use original request instead (see currentPublishRequestToSelf for explanation)
+        //如果leader是本地
         if (transportService.getLocalNode().equals(incomingState.nodes().getMasterNode())) {
             final PublishRequest publishRequest = currentPublishRequestToSelf.get();
+            //验证
             if (publishRequest == null || publishRequest.getAcceptedState().stateUUID().equals(incomingState.stateUUID()) == false) {
                 throw new IllegalStateException("publication to self failed for " + publishRequest);
             } else {
+                //调用Coordinator.handlePublishRequest()
                 return handlePublishRequest.apply(publishRequest);
             }
         }
+        //调用Coordinator.handlePublishRequest()
         return handlePublishRequest.apply(new PublishRequest(incomingState));
     }
 }

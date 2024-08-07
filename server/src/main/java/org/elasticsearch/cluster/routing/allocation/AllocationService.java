@@ -39,6 +39,7 @@ import org.elasticsearch.cluster.routing.UnassignedInfo.AllocationStatus;
 import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
 import org.elasticsearch.cluster.routing.allocation.command.AllocationCommands;
 import org.elasticsearch.cluster.routing.allocation.decider.AllocationDeciders;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.gateway.GatewayAllocator;
 
@@ -225,10 +226,14 @@ public class AllocationService {
     }
 
     /**
+     * 分出已经挂掉节点的分片
      * unassigned an shards that are associated with nodes that are no longer part of the cluster, potentially promoting replicas
      * if needed.
      */
     public ClusterState disassociateDeadNodes(ClusterState clusterState, boolean reroute, String reason) {
+        SourceLogger.info(this.getClass(), "disassociateDeadNodes begin! cause=[{}] ,reroute=[{}]", reason, reroute);
+
+        //获取集群中的路由表
         RoutingNodes routingNodes = getMutableRoutingNodes(clusterState);
         // shuffle the unassigned nodes, just so we won't have things like poison failed shards
         routingNodes.unassigned().shuffle();
@@ -236,16 +241,22 @@ public class AllocationService {
             clusterInfoService.getClusterInfo(), currentNanoTime());
 
         // first, clear from the shards any node id they used to belong to that is now dead
+        //分离死掉的节点上的分片
         disassociateDeadNodes(allocation);
 
         if (allocation.routingNodesChanged()) {
             clusterState = buildResult(clusterState, allocation);
         }
-        if (reroute) {
-            return reroute(clusterState, reason);
-        } else {
-            return clusterState;
+        try {
+            if (reroute) {
+                return reroute(clusterState, reason);
+            } else {
+                return clusterState;
+            }
+        } finally {
+            SourceLogger.info(this.getClass(), "disassociateDeadNodes end!");
         }
+
     }
 
     /**
@@ -273,7 +284,7 @@ public class AllocationService {
                 for (final String index : indices) {
                     final IndexMetaData indexMetaData = metaDataBuilder.get(index);
                     final IndexMetaData.Builder indexMetaDataBuilder =
-                            new IndexMetaData.Builder(indexMetaData).settingsVersion(1 + indexMetaData.getSettingsVersion());
+                        new IndexMetaData.Builder(indexMetaData).settingsVersion(1 + indexMetaData.getSettingsVersion());
                     metaDataBuilder.put(indexMetaDataBuilder);
                 }
                 logger.info("updating number_of_replicas to [{}] for indices {}", numberOfReplicas, indices);
@@ -373,18 +384,32 @@ public class AllocationService {
      * If the same instance of ClusterState is returned, then no change has been made.
      */
     public ClusterState reroute(ClusterState clusterState, String reason) {
+        SourceLogger.info(this.getClass(),"reroute by [{}]",reason);
+
         ClusterState fixedClusterState = adaptAutoExpandReplicas(clusterState);
 
+        //① 获取 RoutingNodes
         RoutingNodes routingNodes = getMutableRoutingNodes(fixedClusterState);
         // shuffle the unassigned nodes, just so we won't have things like poison failed shards
+
+        //② 打乱未分片的shards
         routingNodes.unassigned().shuffle();
+
+        //③ 初始化RoutingAllocation
         RoutingAllocation allocation = new RoutingAllocation(allocationDeciders, routingNodes, fixedClusterState,
             clusterInfoService.getClusterInfo(), currentNanoTime());
+
         reroute(allocation);
+
         if (fixedClusterState == clusterState && allocation.routingNodesChanged() == false) {
             return clusterState;
         }
-        return buildResultAndLogHealthChange(clusterState, allocation, reason);
+        ClusterState newState = buildResultAndLogHealthChange(clusterState, allocation, reason);
+        SourceLogger.info(this.getClass(),"build newState after reroute! old=[{}],new=[{}],reason=[{}]",
+            clusterState.version(),
+            newState.version(),
+            reason);
+        return newState;
     }
 
     private void logClusterHealthStateChange(ClusterStateHealth previousStateHealth, ClusterStateHealth newStateHealth, String reason) {
@@ -411,8 +436,10 @@ public class AllocationService {
 
         removeDelayMarkers(allocation);
         // try to allocate existing shard copies first
+        // 先尝试恢复已存在的分片
         gatewayAllocator.allocateUnassigned(allocation);
 
+        //通用分配器进行重分配
         shardsAllocator.allocate(allocation);
         assert RoutingNodes.assertShardStats(allocation.routingNodes());
     }
@@ -427,10 +454,12 @@ public class AllocationService {
             // now, go over all the shards routing on the node, and fail them
             for (ShardRouting shardRouting : node.copyShards()) {
                 final IndexMetaData indexMetaData = allocation.metaData().getIndexSafe(shardRouting.index());
+                //超时时间
                 boolean delayed = INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.get(indexMetaData.getSettings()).nanos() > 0;
                 UnassignedInfo unassignedInfo = new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "node_left [" + node.nodeId() + "]",
                     null, 0, allocation.getCurrentNanoTime(), System.currentTimeMillis(), delayed, AllocationStatus.NO_ATTEMPT,
                     Collections.emptySet());
+                //记录需要处理的分片
                 allocation.routingNodes().failShard(logger, shardRouting, unassignedInfo, indexMetaData, allocation.changes());
             }
             // its a dead node, remove it, note, its important to remove it *after* we apply failed shard
@@ -459,7 +488,9 @@ public class AllocationService {
         return routingNodes;
     }
 
-    /** override this to control time based decisions during allocation */
+    /**
+     * override this to control time based decisions during allocation
+     */
     protected long currentNanoTime() {
         return System.nanoTime();
     }
@@ -480,6 +511,7 @@ public class AllocationService {
 
         /**
          * Creates a new {@link CommandsResult}
+         *
          * @param explanations Explanation for the reroute actions
          * @param clusterState Resulting cluster state
          */

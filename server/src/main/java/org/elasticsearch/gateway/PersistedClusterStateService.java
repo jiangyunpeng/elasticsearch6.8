@@ -53,6 +53,7 @@ import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.common.CheckedConsumer;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.io.stream.ReleasableBytesStreamOutput;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.logging.Loggers;
@@ -357,6 +358,11 @@ public class PersistedClusterStateService {
                                     && onDiskState.currentTerm > bestOnDiskState.currentTerm))) {
                         bestOnDiskState = onDiskState;
                     }
+                    SourceLogger.info(this.getClass(),"load cluster state from [{}], LastAccept=[{}], LastCommit=[{}]" ,
+                        bestOnDiskState.dataPath,
+                        bestOnDiskState.metaData.coordinationMetaData().getLastAcceptedConfiguration(),
+                        bestOnDiskState.metaData.coordinationMetaData().getLastCommittedConfiguration()
+                        );
                 } catch (IndexNotFoundException e) {
                     logger.debug(new ParameterizedMessage("no on-disk state at {}", indexPath), e);
                 }

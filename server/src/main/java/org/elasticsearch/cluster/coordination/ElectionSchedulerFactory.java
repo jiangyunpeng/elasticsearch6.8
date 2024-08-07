@@ -22,6 +22,7 @@ package org.elasticsearch.cluster.coordination;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.settings.Setting;
@@ -180,7 +181,7 @@ public class ElectionSchedulerFactory {
                 }
             };
 
-            logger.debug("scheduling {}", runnable);
+            //SourceLogger.info(this.getClass(),"scheduling {}", runnable);
             threadPool.scheduleUnlessShuttingDown(TimeValue.timeValueMillis(delayMillis), Names.GENERIC, runnable);
         }
 

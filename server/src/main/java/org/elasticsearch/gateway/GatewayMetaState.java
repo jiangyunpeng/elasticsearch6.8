@@ -41,6 +41,7 @@ import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.MetaDataIndexUpgradeService;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.settings.Settings;
@@ -73,7 +74,7 @@ import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadF
 
 /**
  * Loads (and maybe upgrades) cluster metadata at startup, and persistently stores cluster metadata for future restarts.
- *
+ * <p>
  * When started, ensures that this version is compatible with the state stored on disk, and performs a state upgrade if necessary. Note that
  * the state being loaded when constructing the instance of this class is not necessarily the state that will be used as {@link
  * ClusterState#metaData()} because it might be stale or incomplete. Master-eligible nodes must perform an election to find a complete and
@@ -98,36 +99,12 @@ public class GatewayMetaState implements Closeable {
                       MetaStateService metaStateService, MetaDataIndexUpgradeService metaDataIndexUpgradeService,
                       MetaDataUpgrader metaDataUpgrader, PersistedClusterStateService persistedClusterStateService) {
         assert persistedState.get() == null : "should only start once, but already have " + persistedState.get();
+        SourceLogger.info(this.getClass(), " start begin");
 
-        if (DiscoveryModule.DISCOVERY_TYPE_SETTING.get(settings).equals(DiscoveryModule.ZEN_DISCOVERY_TYPE)) {
-            // only for tests that simulate mixed Zen1/Zen2 clusters, see Zen1IT
-            final Tuple<Manifest, MetaData> manifestClusterStateTuple;
-            try {
-                NodeMetaData.FORMAT.writeAndCleanup(new NodeMetaData(persistedClusterStateService.getNodeId(), Version.CURRENT),
-                    persistedClusterStateService.getDataPaths());
-                manifestClusterStateTuple = metaStateService.loadFullState();
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-            final ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(settings))
-                .version(manifestClusterStateTuple.v1().getClusterStateVersion())
-                .metaData(manifestClusterStateTuple.v2()).build();
-
-            final IncrementalClusterStateWriter incrementalClusterStateWriter
-                = new IncrementalClusterStateWriter(settings, clusterService.getClusterSettings(), metaStateService,
-                manifestClusterStateTuple.v1(),
-                prepareInitialClusterState(transportService, clusterService, clusterState),
-                transportService.getThreadPool()::relativeTimeInMillis);
-
-            if (DiscoveryNode.isMasterNode(settings) || DiscoveryNode.isDataNode(settings)) {
-                clusterService.addLowPriorityApplier(new GatewayClusterApplier(incrementalClusterStateWriter));
-            }
-            persistedState.set(new InMemoryPersistedState(manifestClusterStateTuple.v1().getCurrentTerm(), clusterState));
-            return;
-        }
-
+        //如果是master或者data节点
         if (DiscoveryNode.isMasterNode(settings) || DiscoveryNode.isDataNode(settings)) {
             try {
+                //从磁盘加载 MetaData 、lastAcceptedVersion、currentTerm
                 final PersistedClusterStateService.OnDiskState onDiskState = persistedClusterStateService.loadBestOnDiskState();
 
                 MetaData metaData = onDiskState.metaData;
@@ -174,12 +151,17 @@ public class GatewayMetaState implements Closeable {
                         IOUtils.closeWhileHandlingException(persistedState);
                     }
                 }
+                SourceLogger.info(this.getClass(),"init ClusterState with data/master node currentTerm={}," +
+                        "lastCommitVotingConfig={}, nodes={}",
+                    persistedState.getCurrentTerm(),
+                    persistedState.getLastAcceptedState().getLastCommittedConfiguration(),//VotingConfiguration
+                    persistedState.getLastAcceptedState().getNodes());
 
                 this.persistedState.set(persistedState);
             } catch (IOException e) {
                 throw new ElasticsearchException("failed to load metadata", e);
             }
-        } else {
+        } else {//如果是协调节点
             final long currentTerm = 0L;
             final ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(settings)).build();
             if (persistedClusterStateService.getDataPaths().length > 0) {
@@ -201,7 +183,11 @@ public class GatewayMetaState implements Closeable {
                 }
             }
             persistedState.set(new InMemoryPersistedState(currentTerm, clusterState));
+            SourceLogger.info(this.getClass(),"init ClusterState with ingest node! currentTerm={}, nodes={}",
+                persistedState.get().getCurrentTerm(),
+                persistedState.get().getLastAcceptedState().getNodes());
         }
+        SourceLogger.info(this.getClass(), " start end");
     }
 
     // exposed so it can be overridden by tests
@@ -209,10 +195,10 @@ public class GatewayMetaState implements Closeable {
         assert clusterState.nodes().getLocalNode() == null : "prepareInitialClusterState must only be called once";
         assert transportService.getLocalNode() != null : "transport service is not yet started";
         return Function.<ClusterState>identity()
-            .andThen(ClusterStateUpdaters::addStateNotRecoveredBlock)
-            .andThen(state -> ClusterStateUpdaters.setLocalNode(state, transportService.getLocalNode()))
+            .andThen(ClusterStateUpdaters::addStateNotRecoveredBlock)  //添加ClusterBlock
+            .andThen(state -> ClusterStateUpdaters.setLocalNode(state, transportService.getLocalNode())) //添加本地节点
             .andThen(state -> ClusterStateUpdaters.upgradeAndArchiveUnknownOrInvalidSettings(state, clusterService.getClusterSettings()))
-            .andThen(ClusterStateUpdaters::recoverClusterBlocks)
+            .andThen(ClusterStateUpdaters::recoverClusterBlocks) //删除ClusterBlock
             .apply(clusterState);
     }
 
@@ -238,13 +224,13 @@ public class GatewayMetaState implements Closeable {
         final MetaData.Builder upgradedMetaData = MetaData.builder(metaData);
         for (IndexMetaData indexMetaData : metaData) {
             IndexMetaData newMetaData = metaDataIndexUpgradeService.upgradeIndexMetaData(indexMetaData,
-                    Version.CURRENT.minimumIndexCompatibilityVersion());
+                Version.CURRENT.minimumIndexCompatibilityVersion());
             changed |= indexMetaData != newMetaData;
             upgradedMetaData.put(newMetaData, false);
         }
         // upgrade current templates
         if (applyPluginUpgraders(metaData.getTemplates(), metaDataUpgrader.indexTemplateMetaDataUpgraders,
-                upgradedMetaData::removeTemplate, (s, indexTemplateMetaData) -> upgradedMetaData.put(indexTemplateMetaData))) {
+            upgradedMetaData::removeTemplate, (s, indexTemplateMetaData) -> upgradedMetaData.put(indexTemplateMetaData))) {
             changed = true;
         }
         return changed ? upgradedMetaData.build() : metaData;
@@ -365,6 +351,7 @@ public class GatewayMetaState implements Closeable {
         @Override
         public void setLastAcceptedState(ClusterState clusterState) {
             synchronized (mutex) {
+                SourceLogger.info(AsyncLucenePersistedState.class,"persist clusterState version:[{}]",clusterState.version());
                 super.setLastAcceptedState(clusterState);
                 if (newStateQueued) {
                     logger.trace("cluster state update already queued (setting cluster state to {})", clusterState.version());
@@ -521,6 +508,7 @@ public class GatewayMetaState implements Closeable {
 
         @Override
         public void setLastAcceptedState(ClusterState clusterState) {
+            SourceLogger.info(LucenePersistedState.class,"persist clusterState version:[{}]",clusterState.version());
             try {
                 if (writeNextStateFully) {
                     getWriterSafe().writeFullStateAndCommit(currentTerm, clusterState);

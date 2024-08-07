@@ -31,6 +31,7 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.index.shard.ShardId;
@@ -71,7 +72,7 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
     protected final ShardId shardId;
     protected final String customDataPath;
     private final Lister<BaseNodesResponse<T>, T> action;
-    private final Map<String, NodeEntry<T>> cache = new HashMap<>();
+    private final Map<String, NodeEntry<T>> cache = new HashMap<>();//shardId->node
     private final Set<String> nodesToIgnore = new HashSet<>();
     private final AtomicLong round = new AtomicLong();
     private boolean closed;
@@ -118,20 +119,29 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
         nodesToIgnore.addAll(ignoreNodes);
         fillShardCacheWithDataNodes(cache, nodes);
         List<NodeEntry<T>> nodesToFetch = findNodesToFetch(cache);
-        if (nodesToFetch.isEmpty() == false) {
+        //如果通过shardId找到对应的data节点
+        if (!nodesToFetch.isEmpty()) {
             // mark all node as fetching and go ahead and async fetch them
             // use a unique round id to detect stale responses in processAsyncFetch
             final long fetchingRound = round.incrementAndGet();
             for (NodeEntry<T> nodeEntry : nodesToFetch) {
+                //标记正在fetching
                 nodeEntry.markAsFetching(fetchingRound);
             }
             DiscoveryNode[] discoNodesToFetch = nodesToFetch.stream().map(NodeEntry::getNodeId).map(nodes::get)
                 .toArray(DiscoveryNode[]::new);
+            SourceLogger.info(this.getClass(),"fetching shardId:[{}] type:[{}] to [{}] action:[started_shards] fetchingRound:[{}]",
+                shardId,
+                type,
+                List.of(nodes),
+                fetchingRound);
+            //执行asyncFetch
             asyncFetch(discoNodesToFetch, fetchingRound);
         }
 
         // if we are still fetching, return null to indicate it
         if (hasAnyNodeFetching(cache)) {
+            //返回空数据
             return new FetchResult<>(shardId, null, emptySet());
         } else {
             // nothing to fetch, yay, build the return value
@@ -197,6 +207,9 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
                     } else {
                         // if the entry is there, for the right fetching round and not marked as failed already, process it
                         logger.trace("{} marking {} as done for [{}], result is [{}]", shardId, nodeEntry.getNodeId(), type, response);
+                        SourceLogger.info(this.getClass(),"receive fetch-shard shardId:[{}] response from nodeId:[{}]",
+                            shardId,
+                            nodeEntry.getNodeId());
                         nodeEntry.doneFetching(response);
                     }
                 }
@@ -228,6 +241,9 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
                 }
             }
         }
+        SourceLogger.info(this.getClass(),"handle AsyncFetch from [{}] execute reroute shard:[{}]",
+            responses.get(0).getNode(),
+            shardId);
         reroute(shardId, "post_response");
     }
 
@@ -290,7 +306,6 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
      */
     // visible for testing
     void asyncFetch(final DiscoveryNode[] nodes, long fetchingRound) {
-        logger.trace("{} fetching [{}] from {}", shardId, type, nodes);
         action.list(shardId, customDataPath, nodes, new ActionListener<BaseNodesResponse<T>>() {
             @Override
             public void onResponse(BaseNodesResponse<T> response) {

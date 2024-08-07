@@ -32,6 +32,7 @@ import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RerouteService;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.discovery.zen.ElectMasterService;
 import org.elasticsearch.persistent.PersistentTasksCustomMetaData;
@@ -49,7 +50,7 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
     private final AllocationService allocationService;
 
     private final Logger logger;
-    private final RerouteService rerouteService;
+    private final RerouteService rerouteService; //BatchedRerouteService
 
     private final int minimumMasterNodesOnLocalNode;
 
@@ -155,7 +156,9 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
             }
             results.success(joinTask);
         }
+        SourceLogger.info(JoinTaskExecutor.class, "JoinTaskExecutor execute, nodesChange=[{}]", nodesChanged);
         if (nodesChanged) {
+            //BatchedRerouteService
             rerouteService.reroute("post-join reroute", Priority.HIGH, ActionListener.wrap(
                 r -> logger.trace("post-join reroute completed"),
                 e -> logger.debug("post-join reroute failed", e)));
@@ -173,6 +176,8 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         DiscoveryNodes currentNodes = currentState.nodes();
         DiscoveryNodes.Builder nodesBuilder = DiscoveryNodes.builder(currentNodes);
         nodesBuilder.masterNodeId(currentState.nodes().getLocalNodeId());
+
+        SourceLogger.info(this.getClass(), "becomeMasterAndTrimConflictingNodes(),joiningNodes={}", joiningNodes);
 
         for (final Task joinTask : joiningNodes) {
             if (joinTask.isBecomeMasterTask() || joinTask.isFinishElectionTask()) {
@@ -197,13 +202,15 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         // now trim any left over dead nodes - either left there when the previous master stepped down
         // or removed by us above
         ClusterState tmpState = ClusterState.builder(currentState).nodes(nodesBuilder).blocks(ClusterBlocks.builder()
-            .blocks(currentState.blocks())
-            .removeGlobalBlock(NoMasterBlockService.NO_MASTER_BLOCK_ID))
+                .blocks(currentState.blocks())
+                .removeGlobalBlock(NoMasterBlockService.NO_MASTER_BLOCK_ID))
             .minimumMasterNodesOnPublishingMaster(minimumMasterNodesOnLocalNode)
             .build();
         logger.trace("becomeMasterAndTrimConflictingNodes: {}", tmpState.nodes());
         allocationService.cleanCaches();
+
         tmpState = PersistentTasksCustomMetaData.disassociateDeadNodes(tmpState);
+        //removed dead nodes
         return ClusterState.builder(allocationService.disassociateDeadNodes(tmpState, false, "removed dead nodes on election"));
     }
 
@@ -229,8 +236,9 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
      * Ensures that all indices are compatible with the given node version. This will ensure that all indices in the given metadata
      * will not be created with a newer version of elasticsearch as well as that all indices are newer or equal to the minimum index
      * compatibility version.
-     * @see Version#minimumIndexCompatibilityVersion()
+     *
      * @throws IllegalStateException if any index is incompatible with the given version
+     * @see Version#minimumIndexCompatibilityVersion()
      */
     public static void ensureIndexCompatibility(final Version nodeVersion, MetaData metaData) {
         Version supportedIndexVersion = nodeVersion.minimumIndexCompatibilityVersion();
@@ -248,14 +256,18 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         }
     }
 
-    /** ensures that the joining node has a version that's compatible with all current nodes*/
+    /**
+     * ensures that the joining node has a version that's compatible with all current nodes
+     */
     public static void ensureNodesCompatibility(final Version joiningNodeVersion, DiscoveryNodes currentNodes) {
         final Version minNodeVersion = currentNodes.getMinNodeVersion();
         final Version maxNodeVersion = currentNodes.getMaxNodeVersion();
         ensureNodesCompatibility(joiningNodeVersion, minNodeVersion, maxNodeVersion);
     }
 
-    /** ensures that the joining node has a version that's compatible with a given version range */
+    /**
+     * ensures that the joining node has a version that's compatible with a given version range
+     */
     public static void ensureNodesCompatibility(Version joiningNodeVersion, Version minClusterNodeVersion, Version maxClusterNodeVersion) {
         assert minClusterNodeVersion.onOrBefore(maxClusterNodeVersion) : minClusterNodeVersion + " > " + maxClusterNodeVersion;
         if (joiningNodeVersion.isCompatible(maxClusterNodeVersion) == false) {
@@ -281,7 +293,7 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         }
     }
 
-    public static Collection<BiConsumer<DiscoveryNode,ClusterState>> addBuiltInJoinValidators(
+    public static Collection<BiConsumer<DiscoveryNode, ClusterState>> addBuiltInJoinValidators(
         Collection<BiConsumer<DiscoveryNode, ClusterState>> onJoinValidators) {
         final Collection<BiConsumer<DiscoveryNode, ClusterState>> validators = new ArrayList<>();
         validators.add((node, state) -> {

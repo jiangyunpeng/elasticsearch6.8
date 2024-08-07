@@ -42,6 +42,7 @@ public abstract class ElectionStrategy {
     }
 
     /**
+     * 是否达到选举法定人数，只有true才能开始选举
      * Whether there is an election quorum from the point of view of the given local node under the provided voting configurations
      */
     public final boolean isElectionQuorum(DiscoveryNode localNode, long localCurrentTerm, long localAcceptedTerm, long localAcceptedVersion,

@@ -26,6 +26,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.coordination.CoordinationState.VoteCollection;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.lease.Releasable;
@@ -77,6 +78,7 @@ public class PreVoteCollector {
      * @return the pre-voting round, which can be closed to end the round early.
      */
     public Releasable start(final ClusterState clusterState, final Iterable<DiscoveryNode> broadcastNodes) {
+        SourceLogger.info(this.getClass(), "Start a new pre-voting round! clusterState={}", clusterState.getLastAcceptedConfiguration());
         PreVotingRound preVotingRound = new PreVotingRound(clusterState, state.v2().getCurrentTerm());
         preVotingRound.start(broadcastNodes);
         return preVotingRound;
@@ -144,62 +146,71 @@ public class PreVoteCollector {
 
         void start(final Iterable<DiscoveryNode> broadcastNodes) {
             assert StreamSupport.stream(broadcastNodes.spliterator(), false).noneMatch(Coordinator::isZen1Node) : broadcastNodes;
-            logger.debug("{} requesting pre-votes from {}", this, broadcastNodes);
-            broadcastNodes.forEach(n -> transportService.sendRequest(n, REQUEST_PRE_VOTE_ACTION_NAME, preVoteRequest,
-                new TransportResponseHandler<PreVoteResponse>() {
-                    @Override
-                    public PreVoteResponse read(StreamInput in) throws IOException {
-                        return new PreVoteResponse(in);
-                    }
+            //SourceLogger.info(this.getClass(),"#coordition send request [request_pre_vote] from {}", broadcastNodes);
 
-                    @Override
-                    public void handleResponse(PreVoteResponse response) {
-                        handlePreVoteResponse(response, n);
-                    }
+            broadcastNodes.forEach(n -> {
+                //SourceLogger.info("send pre_vote_request to [{}]",n);
+                transportService.sendRequest(n, REQUEST_PRE_VOTE_ACTION_NAME, preVoteRequest,
+                    new TransportResponseHandler<PreVoteResponse>() {
+                        @Override
+                        public PreVoteResponse read(StreamInput in) throws IOException {
+                            return new PreVoteResponse(in);
+                        }
 
-                    @Override
-                    public void handleException(TransportException exp) {
-                        logger.debug(new ParameterizedMessage("{} failed", this), exp);
-                    }
+                        @Override
+                        public void handleResponse(PreVoteResponse response) {
+                            handlePreVoteResponse(response, n);
+                        }
 
-                    @Override
-                    public String executor() {
-                        return Names.GENERIC;
-                    }
+                        @Override
+                        public void handleException(TransportException exp) {
+                            logger.debug(new ParameterizedMessage("{} failed", this), exp);
+                        }
 
-                    @Override
-                    public String toString() {
-                        return "TransportResponseHandler{" + PreVoteCollector.this + ", node=" + n + '}';
-                    }
-                }));
+                        @Override
+                        public String executor() {
+                            return Names.GENERIC;
+                        }
+
+                        @Override
+                        public String toString() {
+                            return "TransportResponseHandler{" + PreVoteCollector.this + ", node=" + n + '}';
+                        }
+                    });
+            });
         }
 
         private void handlePreVoteResponse(final PreVoteResponse response, final DiscoveryNode sender) {
+            //① 如果当前节点已经关闭，则忽略这个预投票响应，并记录日志
             if (isClosed.get()) {
                 logger.debug("{} is closed, ignoring {} from {}", this, response, sender);
                 return;
             }
+            SourceLogger.info(this.getClass(), "handlePreVoteResponse() response={}", response);
 
+            //②更新节点所见的最大任期（term），以确保节点不会参与比自己更新的任期的选举
             updateMaxTermSeen.accept(response.getCurrentTerm());
 
+            //③如果对方的term或者version比当前节点的状态更新，则忽略该响应，并记录日志。
             if (response.getLastAcceptedTerm() > clusterState.term()
                 || (response.getLastAcceptedTerm() == clusterState.term()
                 && response.getLastAcceptedVersion() > clusterState.getVersionOrMetaDataVersion())) {
-                logger.debug("{} ignoring {} from {} as it is fresher", this, response, sender);
+                SourceLogger.info(this.getClass(), "{} ignoring {} from {} as it is fresher", this, response, sender);
                 return;
             }
-
+            //④记录预投票响应：将预投票响应存储到 preVotesReceived 集合中。
             preVotesReceived.put(sender, response);
 
-            // create a fake VoteCollection based on the pre-votes and check if there is an election quorum
             final VoteCollection voteCollection = new VoteCollection();
             final DiscoveryNode localNode = clusterState.nodes().getLocalNode();
             final PreVoteResponse localPreVoteResponse = getPreVoteResponse();
 
+            //把preVotesReceived 转为 VoteCollection
             preVotesReceived.forEach((node, preVoteResponse) -> voteCollection.addJoinVote(
                 new Join(node, localNode, preVoteResponse.getCurrentTerm(),
-                preVoteResponse.getLastAcceptedTerm(), preVoteResponse.getLastAcceptedVersion())));
+                    preVoteResponse.getLastAcceptedTerm(), preVoteResponse.getLastAcceptedVersion())));
 
+            //检查选举法定人数：使用 electionStrategy 检查是否达到了选举所需的法定人数。如果未达到，则记录日志并返回。
             if (electionStrategy.isElectionQuorum(clusterState.nodes().getLocalNode(), localPreVoteResponse.getCurrentTerm(),
                 localPreVoteResponse.getLastAcceptedTerm(), localPreVoteResponse.getLastAcceptedVersion(),
                 clusterState.getLastCommittedConfiguration(), clusterState.getLastAcceptedConfiguration(), voteCollection) == false) {
@@ -213,6 +224,7 @@ public class PreVoteCollector {
             }
 
             logger.debug("{} added {} from {}, starting election", this, response, sender);
+            //开始选举
             startElection.run();
         }
 

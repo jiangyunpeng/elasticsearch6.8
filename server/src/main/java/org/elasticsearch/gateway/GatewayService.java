@@ -32,6 +32,7 @@ import org.elasticsearch.cluster.coordination.Coordinator;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Setting;
@@ -147,6 +148,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
 
     @Override
     public void clusterChanged(final ClusterChangedEvent event) {
+        SourceLogger.info(this.getClass(),"#handle ClusterChangedEvent");
         if (lifecycle.stoppedOrClosed()) {
             return;
         }
@@ -199,9 +201,13 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
             }
             performStateRecovery(enforceRecoverAfterTime, reason);
         }
+
+        SourceLogger.info(this.getClass(),"#handle ClusterChangedEvent end");
     }
 
     private void performStateRecovery(final boolean enforceRecoverAfterTime, final String reason) {
+        SourceLogger.info(this.getClass(),"performStateRecovery {}",reason);
+
         if (enforceRecoverAfterTime && recoverAfterTime != null) {
             if (scheduledRecovery.compareAndSet(false, true)) {
                 logger.info("delaying initial state recovery for [{}]. {}", recoverAfterTime, reason);
@@ -253,6 +259,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
                     .andThen(ClusterStateUpdaters::removeStateNotRecoveredBlock)
                     .apply(currentState);
 
+            SourceLogger.info(RecoverStateUpdateTask.class,"RecoverStateUpdateTask execute");
             return allocationService.reroute(newState, "state recovered");
         }
 
@@ -282,6 +289,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
         @Override
         public void onSuccess(final ClusterState recoveredState) {
             logger.trace("successful state recovery, importing cluster state...");
+            SourceLogger.info(this.getClass(),"successful state recovery, submit ClusterStateUpdateTask");
             clusterService.submitStateUpdateTask("local-gateway-elected-state", new RecoverStateUpdateTask() {
                 @Override
                 public ClusterState execute(final ClusterState currentState) {

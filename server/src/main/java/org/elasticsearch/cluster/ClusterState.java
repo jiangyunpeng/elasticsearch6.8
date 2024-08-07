@@ -880,7 +880,7 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
             toVersion = in.readLong();
             routingTable = RoutingTable.readDiffFrom(in);
             nodes = DiscoveryNodes.readDiffFrom(in, localNode);
-            metaData = MetaData.readDiffFrom(in);
+            metaData = MetaData.readDiffFrom(in);//增量读取
             blocks = ClusterBlocks.readDiffFrom(in);
             customs = DiffableUtils.readImmutableOpenMapDiff(in, DiffableUtils.getStringKeySerializer(), CUSTOM_VALUE_SERIALIZER);
             minimumMasterNodesOnPublishingMaster = in.getVersion().onOrAfter(Version.V_6_7_0) ? in.readVInt() : -1;

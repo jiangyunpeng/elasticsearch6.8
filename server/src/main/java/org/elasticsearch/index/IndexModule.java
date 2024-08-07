@@ -32,6 +32,7 @@ import org.elasticsearch.Version;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedFunction;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.TriFunction;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Setting;
@@ -407,7 +408,7 @@ public final class IndexModule {
         IndexAnalyzers indexAnalyzers = null;
         boolean success = false;
         try {
-            if (indexSettings.getValue(INDEX_QUERY_CACHE_ENABLED_SETTING)) {
+            if (indexSettings.getValue(INDEX_QUERY_CACHE_ENABLED_SETTING)) {//是否开启 index.queries.cache.enabled
                 BiFunction<IndexSettings, IndicesQueryCache, QueryCache> queryCacheProvider = forceQueryCacheProvider.get();
                 if (queryCacheProvider == null) {
                     queryCache = new IndexQueryCache(indexSettings, indicesQueryCache);

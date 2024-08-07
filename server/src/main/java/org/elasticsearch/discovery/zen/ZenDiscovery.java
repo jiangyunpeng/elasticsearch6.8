@@ -43,6 +43,7 @@ import org.elasticsearch.cluster.service.ClusterApplier;
 import org.elasticsearch.cluster.service.ClusterApplier.ClusterApplyListener;
 import org.elasticsearch.cluster.service.MasterService;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.component.Lifecycle;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -428,6 +429,8 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
      * or spawn a new join thread upon failure to do so.
      */
     private void innerJoinCluster() {
+        SourceLogger.info("innerJoinCluster");
+
         DiscoveryNode masterNode = null;
         final Thread currentThread = Thread.currentThread();
         nodeJoinController.startElectionContext();
@@ -439,6 +442,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             logger.trace("thread is no longer in currentJoinThread. Stopping.");
             return;
         }
+        SourceLogger.info("already findMaster! masterNode={}",masterNode);
 
         if (transportService.getLocalNode().equals(masterNode)) {
             final int requiredJoins = Math.max(0, electMaster.minimumMasterNodes() - 1); // we count as one

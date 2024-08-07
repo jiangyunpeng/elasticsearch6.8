@@ -37,6 +37,7 @@ import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.routing.RecoverySource;
 import org.elasticsearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
@@ -92,7 +93,6 @@ final class StoreRecovery {
             assert recoveryType == RecoverySource.Type.EMPTY_STORE || recoveryType == RecoverySource.Type.EXISTING_STORE :
                 "expected store recovery type but was: " + recoveryType;
             ActionListener.completeWith(recoveryListener(indexShard, listener), () -> {
-                logger.debug("starting recovery from store ...");
                 internalRecoverFromStore(indexShard);
                 return true;
             });
@@ -372,11 +372,13 @@ final class StoreRecovery {
         indexShard.prepareForIndexRecovery();
         SegmentInfos si = null;
         final Store store = indexShard.store();
+        SourceLogger.info(this.getClass(),"recoverFromStore shard:[{}]",indexShard.shardId);
         store.incRef();
         try {
             try {
                 store.failIfCorrupted();
                 try {
+                    //读取 last committed segments info
                     si = store.readLastCommittedSegmentsInfo();
                 } catch (Exception e) {
                     String files = "_unknown_";
@@ -447,6 +449,7 @@ final class StoreRecovery {
     private void addRecoveredFileDetails(SegmentInfos si, Store store, RecoveryState.Index index) throws IOException {
         final Directory directory = store.directory();
         for (String name : Lucene.files(si)) {
+            SourceLogger.info(this.getClass(),"recover file {}",name);
             long length = directory.fileLength(name);
             index.addFileDetail(name, length, true);
         }

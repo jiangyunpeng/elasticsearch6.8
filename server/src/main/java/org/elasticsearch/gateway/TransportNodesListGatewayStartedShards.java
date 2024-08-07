@@ -36,6 +36,7 @@ import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -116,7 +117,8 @@ public class TransportNodesListGatewayStartedShards extends
     protected NodeGatewayStartedShards nodeOperation(NodeRequest request) {
         try {
             final ShardId shardId = request.getShardId();
-            logger.trace("{} loading local shard state info", shardId);
+            SourceLogger.info(this.getClass(),"{} loading local shard state info", shardId);
+
             ShardStateMetaData shardStateMetaData = ShardStateMetaData.FORMAT.loadLatestState(logger, namedXContentRegistry,
                 nodeEnv.availableShardPaths(request.shardId));
             if (shardStateMetaData != null) {
@@ -157,12 +159,12 @@ public class TransportNodesListGatewayStartedShards extends
                     }
                 }
 
-                logger.debug("{} shard state info found: [{}]", shardId, shardStateMetaData);
+                SourceLogger.info(this.getClass(),"{} shard state info found: [{}]", shardId, shardStateMetaData);
                 String allocationId = shardStateMetaData.allocationId != null ?
                     shardStateMetaData.allocationId.getId() : null;
                 return new NodeGatewayStartedShards(clusterService.localNode(), allocationId, shardStateMetaData.primary);
             }
-            logger.trace("{} no local shard info found", shardId);
+            SourceLogger.info(this.getClass(),"{} no local shard info found", shardId);
             return new NodeGatewayStartedShards(clusterService.localNode(), null, false);
         } catch (Exception e) {
             throw new ElasticsearchException("failed to load started shards", e);

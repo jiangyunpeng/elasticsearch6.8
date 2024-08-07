@@ -30,6 +30,7 @@ import org.elasticsearch.cluster.NotMasterException;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,7 +59,7 @@ public class BatchedRerouteService implements RerouteService {
      */
     public BatchedRerouteService(ClusterService clusterService, BiFunction<ClusterState, String, ClusterState> reroute) {
         this.clusterService = clusterService;
-        this.reroute = reroute;
+        this.reroute = reroute;//AllocationService.reroute()
     }
 
     /**
@@ -92,6 +93,7 @@ public class BatchedRerouteService implements RerouteService {
                 pendingTaskPriority = priority;
             }
         }
+        SourceLogger.info(this.getClass(),"submit reroute! cause {}",reason);
         try {
             clusterService.submitStateUpdateTask(CLUSTER_UPDATE_TASK_SOURCE + "(" + reason + ")",
                 new ClusterStateUpdateTask(priority) {
@@ -108,10 +110,11 @@ public class BatchedRerouteService implements RerouteService {
                             }
                         }
                         if (currentListenersArePending) {
-                            logger.trace("performing batched reroute [{}]", reason);
+                            SourceLogger.info(this.getClass(),"performing batched reroute [{}]", reason);
+                            //调用AllocationService.reroute()
                             return reroute.apply(currentState, reason);
                         } else {
-                            logger.trace("batched reroute [{}] was promoted", reason);
+                            SourceLogger.info(this.getClass(),"batched reroute [{}] was promoted", reason);
                             return currentState;
                         }
                     }

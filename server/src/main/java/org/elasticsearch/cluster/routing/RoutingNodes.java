@@ -31,6 +31,7 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.UnassignedInfo.AllocationStatus;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Randomness;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
@@ -144,8 +145,16 @@ public class RoutingNodes implements Iterable<RoutingNode> {
         }
         for (Map.Entry<String, LinkedHashMap<ShardId, ShardRouting>> entry : nodesToShards.entrySet()) {
             String nodeId = entry.getKey();
+//            SourceLogger.info(this.getClass(),"new RoutingNode! put nodes[{}] to RoutingNode[{}]",
+//                nodeId,
+//                entry.getValue().size()
+//                );
             this.nodesToShards.put(nodeId, new RoutingNode(nodeId, clusterState.nodes().get(nodeId), entry.getValue()));
         }
+
+//        SourceLogger.info(this.getClass(),"new routingNodes! readOnly:[{}] unassignedShards:{}",
+//            readOnly,
+//            unassignedShards.unassigned);
     }
 
     private void addRecovery(ShardRouting routing) {
@@ -426,8 +435,15 @@ public class RoutingNodes implements Iterable<RoutingNode> {
                                         long expectedSize, RoutingChangesObserver routingChangesObserver) {
         ensureMutable();
         assert unassignedShard.unassigned() : "expected an unassigned shard " + unassignedShard;
+
+        SourceLogger.info(this.getClass(),"initializeShard! allocate unassignedShard:{} to nodeId:[{}], ",unassignedShard,nodeId);
+
+        //①新建ShardRouting, 状态为INITIALIZING
         ShardRouting initializedShard = unassignedShard.initialize(nodeId, existingAllocationId, expectedSize);
+
+        //② 添加到 nodesToShards: nodeId=>RoutingNode
         node(nodeId).add(initializedShard);
+
         inactiveShardCount++;
         if (initializedShard.primary()) {
             inactivePrimaryCount++;

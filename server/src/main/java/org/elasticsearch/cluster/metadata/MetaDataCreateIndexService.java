@@ -48,6 +48,7 @@ import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.ValidationException;
@@ -262,7 +263,7 @@ public class MetaDataCreateIndexService {
      * All the requested changes are firstly validated before mutating the {@link ClusterState}.
      */
     public ClusterState applyCreateIndexRequest(ClusterState currentState, CreateIndexClusterStateUpdateRequest request) throws Exception {
-        logger.trace("executing IndexCreationTask for [{}] against cluster state version [{}]", request, currentState.version());
+        SourceLogger.info("executing IndexCreationTask for [{}] against cluster state version [{}]", request, currentState.version());
         Index createdIndex = null;
         String removalExtraInfo = null;
         IndexRemovalReason removalReason = IndexRemovalReason.FAILURE;
@@ -290,7 +291,7 @@ public class MetaDataCreateIndexService {
         settingsBuilder.remove(IndexMetaData.INDEX_NUMBER_OF_ROUTING_SHARDS_SETTING.getKey());
         final Settings indexSettings = settingsBuilder.build();
 
-        try {
+        try {//验证
             final IndexService indexService = validateActiveShardCountAndCreateIndexService(request.index(), request.waitForActiveShards(),
                 indexSettings, routingNumShards, indicesService);
             // create the index here (on the master) to validate it can be created, as well as adding the mapping
@@ -320,12 +321,13 @@ public class MetaDataCreateIndexService {
                 throw e;
             }
 
-            logger.info("[{}] creating index, cause [{}], templates {}, shards [{}]/[{}], mappings {}",
+            SourceLogger.info(this.getClass(),"[{}] creating index, cause [{}], templates {}, shards [{}]/[{}], mappings {}",
                 request.index(), request.cause(), templates.stream().map(IndexTemplateMetaData::getName).collect(toList()),
                 indexMetaData.getNumberOfShards(), indexMetaData.getNumberOfReplicas(), mappings.keySet());
 
             indexService.getIndexEventListener().beforeIndexAddedToCluster(indexMetaData.getIndex(),
                 indexMetaData.getSettings());
+            //更新ClusterState
             final ClusterState updatedState = clusterStateCreateIndex(currentState, request.blocks(), indexMetaData,
                 allocationService::reroute);
 
@@ -578,10 +580,12 @@ public class MetaDataCreateIndexService {
         blocks.updateBlocks(indexMetaData);
 
         ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).metaData(newMetaData).build();
-
+        //更新路由表
         RoutingTable.Builder routingTableBuilder = RoutingTable.builder(updatedState.routingTable())
-            .addAsNew(updatedState.metaData().index(indexName));
+            .addAsNew(updatedState.metaData().index(indexName));//添加索引的索引
         updatedState = ClusterState.builder(updatedState).routingTable(routingTableBuilder.build()).build();
+
+        //应用到 AllocationService.reroute(updatedState,"index [" + indexName + "] create")
         return rerouteRoutingTable.apply(updatedState, "index [" + indexName + "] created");
     }
 
@@ -686,7 +690,7 @@ public class MetaDataCreateIndexService {
             throw new IllegalArgumentException("invalid wait_for_active_shards[" + waitForActiveShards +
                 "]: cannot be greater than number of shard copies [" +
                 (tmpImd.getNumberOfReplicas() + 1) + "]");
-        }
+        }//构建IndexService
         return indicesService.createIndex(tmpImd, Collections.emptyList(), false);
     }
 

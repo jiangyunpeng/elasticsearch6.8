@@ -35,6 +35,7 @@ import org.elasticsearch.cluster.routing.RerouteService;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.MasterService;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.settings.Setting;
@@ -120,7 +121,7 @@ public class JoinHelper {
             }
 
         };
-
+        //join回调 joinHandler->Coordinator.handleJoinRequest()
         transportService.registerRequestHandler(JOIN_ACTION_NAME, ThreadPool.Names.GENERIC, false, false, JoinRequest::new,
             (request, channel, task) -> joinHandler.accept(request, transportJoinCallback(request, channel)));
 
@@ -129,6 +130,7 @@ public class JoinHelper {
             (request, channel, task) -> joinHandler.accept(new JoinRequest(request.getNode(), Optional.empty()), // treat as non-voting join
                 transportJoinCallback(request, channel)));
 
+        //start_join回调 ->sendJoinRequest()， joinLeaderInTerm->Coordinator.joinLeaderInTerm()
         transportService.registerRequestHandler(START_JOIN_ACTION_NAME, Names.GENERIC, false, false,
             StartJoinRequest::new,
             (request, channel, task) -> {
@@ -209,6 +211,7 @@ public class JoinHelper {
     }
 
     public void sendJoinRequest(DiscoveryNode destination, Optional<Join> optionalJoin) {
+        SourceLogger.info("sendJoinRequest join={}",optionalJoin.get());
         sendJoinRequest(destination, optionalJoin, () -> {
         });
     }
@@ -315,6 +318,7 @@ public class JoinHelper {
     public void sendStartJoinRequest(final StartJoinRequest startJoinRequest, final DiscoveryNode destination) {
         assert startJoinRequest.getSourceNode().isMasterNode()
             : "sending start-join request for master-ineligible " + startJoinRequest.getSourceNode();
+
         transportService.sendRequest(destination, START_JOIN_ACTION_NAME,
             startJoinRequest, new TransportResponseHandler<Empty>() {
                 @Override
@@ -346,6 +350,7 @@ public class JoinHelper {
         } else {
             actionName = VALIDATE_JOIN_ACTION_NAME;
         }
+        SourceLogger.info(this.getClass(),"sendValidateJoinRequest to [{}]",node);
         transportService.sendRequest(node, actionName,
             new ValidateJoinRequest(state),
             TransportRequestOptions.builder().withTimeout(joinTimeout).build(),
@@ -393,6 +398,7 @@ public class JoinHelper {
     class LeaderJoinAccumulator implements JoinAccumulator {
         @Override
         public void handleJoinRequest(DiscoveryNode sender, JoinCallback joinCallback) {
+
             final JoinTaskExecutor.Task task = new JoinTaskExecutor.Task(sender, "join existing leader");
             masterService.submitStateUpdateTask("node-join", task, ClusterStateTaskConfig.build(Priority.URGENT),
                 joinTaskExecutor, new JoinTaskListener(task, joinCallback));
@@ -460,6 +466,8 @@ public class JoinHelper {
                 });
                 pendingAsTasks.put(JoinTaskExecutor.newFinishElectionTask(), (source, e) -> {
                 });
+                SourceLogger.info(this.getClass(),"cose() mode={}",newMode);
+                //提交两个本地任务
                 masterService.submitStateUpdateTasks(stateUpdateSource, pendingAsTasks, ClusterStateTaskConfig.build(Priority.URGENT),
                     joinTaskExecutor);
             } else {

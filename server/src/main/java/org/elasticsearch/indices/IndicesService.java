@@ -47,6 +47,7 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
@@ -513,6 +514,8 @@ public class IndicesService extends AbstractLifecycleComponent
     public synchronized IndexService createIndex(
             final IndexMetaData indexMetaData, final List<IndexEventListener> builtInListeners,
             final boolean writeDanglingIndices) throws IOException {
+        SourceLogger.info(this.getClass(),"createIndex {}",indexMetaData.getIndex());
+
         ensureChangesAllowed();
         if (indexMetaData.getIndexUUID().equals(IndexMetaData.INDEX_UUID_NA_VALUE)) {
             throw new IllegalArgumentException("index must have a real UUID found value: [" + indexMetaData.getIndexUUID() + "]");
@@ -586,11 +589,12 @@ public class IndicesService extends AbstractLifecycleComponent
         }
         // we ignore private settings since they are not registered settings
         indexScopedSettings.validate(indexMetaData.getSettings(), true, true, true);
-        logger.debug("creating Index [{}], shards [{}]/[{}] - reason [{}]",
+        SourceLogger.info(this.getClass(),"creating Index [{}], shards [{}]/[{}] - reason [{}]",
             indexMetaData.getIndex(),
             idxSettings.getNumberOfShards(),
             idxSettings.getNumberOfReplicas(),
             indexCreationContext);
+
 
         final IndexModule indexModule = new IndexModule(idxSettings, analysisRegistry, getEngineFactory(idxSettings), directoryFactories);
         for (IndexingOperationListener operationListener : indexingOperationListeners) {
@@ -703,6 +707,8 @@ public class IndicesService extends AbstractLifecycleComponent
             final Consumer<IndexShard.ShardFailure> onShardFailure,
             final Consumer<ShardId> globalCheckpointSyncer,
             final RetentionLeaseSyncer retentionLeaseSyncer) throws IOException {
+        SourceLogger.info(this.getClass(),"createShard");
+
         Objects.requireNonNull(retentionLeaseSyncer);
         ensureChangesAllowed();
         IndexService indexService = indexService(shardRouting.index());

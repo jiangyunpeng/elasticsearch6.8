@@ -58,6 +58,7 @@ import org.elasticsearch.common.CheckedConsumer;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.CheckedRunnable;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.lease.Releasable;
@@ -190,7 +191,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
     private final ThreadPool threadPool;
     private final MapperService mapperService;
     private final IndexCache indexCache;
-    private final Store store;
+    private final Store store;//底层索引文件存储入口
     private final InternalIndexingStats internalIndexingStats;
     private final ShardSearchStats searchStats = new ShardSearchStats();
     private final ShardGetService getService;
@@ -1837,6 +1838,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         assert shardRouting.primary() : "recover from local shards only makes sense if the shard is a primary shard";
         assert recoveryState.getRecoverySource().getType() == RecoverySource.Type.LOCAL_SHARDS : "invalid recovery type: " +
             recoveryState.getRecoverySource();
+
         final List<LocalShardSnapshot> snapshots = new ArrayList<>();
         final ActionListener<Boolean> recoveryListener = ActionListener.runBefore(listener, () -> IOUtils.close(snapshots));
         boolean success = false;
@@ -2558,10 +2560,12 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         //           }
         //     }}
         // }
+        SourceLogger.info(this.getClass(),"startRecovery shard:[{}] from type:[{}]",shardPath(),recoveryState.getRecoverySource().getType());
         assert recoveryState.getRecoverySource().equals(shardRouting.recoverySource());
         switch (recoveryState.getRecoverySource().getType()) {
             case EMPTY_STORE:
             case EXISTING_STORE:
+                //注意调用回调::recoverFromStore
                 executeRecovery("from store", recoveryState, recoveryListener, this::recoverFromStore);
                 break;
             case PEER:

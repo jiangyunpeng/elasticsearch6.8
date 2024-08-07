@@ -211,7 +211,7 @@ public class RestController implements HttpServerTransport.Dispatcher {
                 return;
             }
         }
-        logger.info(request.getHttpRequest());
+
         RestChannel responseChannel = channel;
         try {
             if (handler.canTripCircuitBreaker()) {

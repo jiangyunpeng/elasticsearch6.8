@@ -27,6 +27,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.coordination.Coordinator.Mode;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.Setting;
@@ -141,6 +142,7 @@ public class FollowersChecker {
                     && followerCheckers.containsKey(discoveryNode) == false
                     && faultyNodes.contains(discoveryNode) == false) {
 
+                    SourceLogger.info("start FollowerChecker! node:[{}]",discoveryNode);
                     final FollowerChecker followerChecker = new FollowerChecker(discoveryNode);
                     followerCheckers.put(discoveryNode, followerChecker);
                     followerChecker.start();
@@ -168,7 +170,12 @@ public class FollowersChecker {
 
     private void handleFollowerCheck(FollowerCheckRequest request, TransportChannel transportChannel) throws IOException {
         FastResponseState responder = this.fastResponseState;
+        SourceLogger.info(this.getClass(),"handleFollowerCheck! sourceNode:[{}],requestTerm:[{}],currentTerm:[{}]",
+            request.getSender(),
+            request.getTerm(),
+            responder.term);
 
+        //如果当前已经是FOLLOWER，并且term一致，返回
         if (responder.mode == Mode.FOLLOWER && responder.term == request.term) {
             // TODO trigger a term bump if we voted for a different leader in this term
             logger.trace("responding to {} on fast path", request);
@@ -313,6 +320,7 @@ public class FollowersChecker {
                 actionName = FOLLOWER_CHECK_ACTION_NAME;
                 transportRequest = request;
             }
+            SourceLogger.info(this.getClass(),"send heartbeat! action:[{}] to [{}]",actionName ,discoveryNode );
             transportService.sendRequest(discoveryNode, actionName, transportRequest,
                 TransportRequestOptions.builder().withTimeout(followerCheckTimeout).withType(Type.PING).build(),
                 new TransportResponseHandler<Empty>() {

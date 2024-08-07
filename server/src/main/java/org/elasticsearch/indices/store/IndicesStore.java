@@ -35,6 +35,7 @@ import org.elasticsearch.cluster.routing.RoutingNode;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -159,6 +160,7 @@ public class IndicesStore implements ClusterStateListener, Closeable {
                     }
                     IndicesService.ShardDeletionCheckResult shardDeletionCheckResult =
                         indicesService.canDeleteShardContent(shardId, indexSettings);
+                    SourceLogger.info("check shard routing! shard={} , result={}",shardId,shardDeletionCheckResult);
                     switch (shardDeletionCheckResult) {
                         case FOLDER_FOUND_CAN_DELETE:
                             deleteShardIfExistElseWhere(event.state(), indexShardRoutingTable);

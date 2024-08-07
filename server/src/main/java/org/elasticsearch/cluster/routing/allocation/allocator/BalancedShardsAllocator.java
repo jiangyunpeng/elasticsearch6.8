@@ -41,6 +41,7 @@ import org.elasticsearch.cluster.routing.allocation.decider.AllocationDeciders;
 import org.elasticsearch.cluster.routing.allocation.decider.Decision;
 import org.elasticsearch.cluster.routing.allocation.decider.Decision.Type;
 import org.elasticsearch.cluster.routing.allocation.decider.DiskThresholdDecider;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.ClusterSettings;
@@ -115,14 +116,21 @@ public class BalancedShardsAllocator implements ShardsAllocator {
 
     @Override
     public void allocate(RoutingAllocation allocation) {
+        //如果路由节点size为0
         if (allocation.routingNodes().size() == 0) {
             failAllocationOfNewPrimaries(allocation);
             return;
         }
+        SourceLogger.info(this.getClass(),"allocate begin");
+        //基于weightFunction、threshold 创建Balancer
         final Balancer balancer = new Balancer(logger, allocation, weightFunction, threshold);
+        //分配未分配的shard
         balancer.allocateUnassigned();
+        //移动那些node已挂掉的shard
         balancer.moveShards();
+        //再平衡
         balancer.balance();
+        SourceLogger.info(this.getClass(),"allocate end");
     }
 
     @Override
@@ -762,13 +770,11 @@ public class BalancedShardsAllocator implements ShardsAllocator {
         private void allocateUnassigned() {
             RoutingNodes.UnassignedShards unassigned = routingNodes.unassigned();
             assert !nodes.isEmpty();
-            if (logger.isTraceEnabled()) {
-                logger.trace("Start allocating unassigned shards");
-            }
+
+            SourceLogger.info(this.getClass(),"Start allocating unassigned shards[{}]",unassigned.size());
             if (unassigned.isEmpty()) {
                 return;
             }
-
             /*
              * TODO: We could be smarter here and group the shards by index and then
              * use the sorter to save some iterations.
@@ -814,9 +820,7 @@ public class BalancedShardsAllocator implements ShardsAllocator {
                     final ModelNode minNode = assignedNodeId != null ? nodes.get(assignedNodeId) : null;
 
                     if (allocationDecision.getAllocationDecision() == AllocationDecision.YES) {
-                        if (logger.isTraceEnabled()) {
-                            logger.trace("Assigned shard [{}] to [{}]", shard, minNode.getNodeId());
-                        }
+                        SourceLogger.info(this.getClass(),"Assigned shard [{}] to [{}]", shard,minNode.getNodeId());
 
                         final long shardSize = DiskThresholdDecider.getExpectedShardSize(shard,
                             ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE,

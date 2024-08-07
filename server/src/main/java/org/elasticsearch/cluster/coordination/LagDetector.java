@@ -165,6 +165,7 @@ public class LagDetector {
             logger.warn(
                 "node [{}] is lagging at cluster state version [{}], although publication of cluster state version [{}] completed [{}] ago",
                 discoveryNode, appliedVersion, version, clusterStateApplicationTimeout);
+            //如果超时会移除节点
             onLagDetected.accept(discoveryNode);
         }
     }

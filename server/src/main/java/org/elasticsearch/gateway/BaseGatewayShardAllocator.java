@@ -29,6 +29,7 @@ import org.elasticsearch.cluster.routing.allocation.AllocationDecision;
 import org.elasticsearch.cluster.routing.allocation.NodeAllocationResult;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.cluster.routing.allocation.decider.Decision;
+import org.elasticsearch.common.SourceLogger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,10 +53,12 @@ public abstract class BaseGatewayShardAllocator {
      * @param allocation the allocation state container object
      */
     public void allocateUnassigned(RoutingAllocation allocation) {
+        SourceLogger.info(this.getClass(),"allocate Unassigned begin");
         final RoutingNodes routingNodes = allocation.routingNodes();
         final RoutingNodes.UnassignedShards.UnassignedIterator unassignedIterator = routingNodes.unassigned().iterator();
         while (unassignedIterator.hasNext()) {
             final ShardRouting shard = unassignedIterator.next();
+            //① fetch shard 信息
             final AllocateUnassignedDecision allocateUnassignedDecision = makeAllocationDecision(shard, allocation, logger);
 
             if (allocateUnassignedDecision.isDecisionTaken() == false) {
@@ -63,16 +66,21 @@ public abstract class BaseGatewayShardAllocator {
                 continue;
             }
 
+            //如果可以恢复
             if (allocateUnassignedDecision.getAllocationDecision() == AllocationDecision.YES) {
+                //执行分配
                 unassignedIterator.initialize(allocateUnassignedDecision.getTargetNode().getId(),
                     allocateUnassignedDecision.getAllocationId(),
                     shard.primary() ? ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE :
                                       allocation.clusterInfo().getShardSize(shard, ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE),
                     allocation.changes());
             } else {
+                //移除
                 unassignedIterator.removeAndIgnore(allocateUnassignedDecision.getAllocationStatus(), allocation.changes());
             }
         }
+
+        SourceLogger.info(this.getClass(),"allocate Unassigned end");
     }
 
     /**

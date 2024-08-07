@@ -31,6 +31,7 @@ import org.elasticsearch.cluster.coordination.PeersResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
@@ -112,12 +113,12 @@ public abstract class PeerFinder {
             PeersRequest::new,
             (request, channel, task) -> channel.sendResponse(handlePeersRequest(request)));
 
-        transportService.registerRequestHandler(UnicastZenPing.ACTION_NAME, Names.GENERIC, false, false,
-            UnicastZenPing.UnicastPingRequest::new, new Zen1UnicastPingRequestHandler());
+//        transportService.registerRequestHandler(UnicastZenPing.ACTION_NAME, Names.GENERIC, false, false,
+//            UnicastZenPing.UnicastPingRequest::new, new Zen1UnicastPingRequestHandler());
     }
 
     public void activate(final DiscoveryNodes lastAcceptedNodes) {
-        logger.trace("activating with {}", lastAcceptedNodes);
+        SourceLogger.info(PeerFinder.class,"activating with nodes [{}]",lastAcceptedNodes);
 
         synchronized (mutex) {
             assert assertInactiveWithNoKnownPeers();
@@ -161,7 +162,10 @@ public abstract class PeerFinder {
             assert peersRequest.getSourceNode().equals(getLocalNode()) == false;
             final List<DiscoveryNode> knownPeers;
             if (active) {
+                //如果已经选出leader，则报错
                 assert leader.isPresent() == false : leader;
+                //如果对方属于master节点，启动探测
+                SourceLogger.info(this.getClass(),"handlePeersRequest! ");
                 if (peersRequest.getSourceNode().isMasterNode()) {
                     startProbe(peersRequest.getSourceNode().getAddress());
                 }
@@ -264,7 +268,7 @@ public abstract class PeerFinder {
             return peersRemoved;
         }
 
-        logger.trace("probing master nodes from cluster state: {}", lastAcceptedNodes);
+        SourceLogger.info(this.getClass(),"handleWakeUp() probing master nodes from cluster state: {}", lastAcceptedNodes);
         for (ObjectCursor<DiscoveryNode> discoveryNodeObjectCursor : lastAcceptedNodes.getMasterNodes().values()) {
             startProbe(discoveryNodeObjectCursor.value.getAddress());
         }
@@ -272,11 +276,12 @@ public abstract class PeerFinder {
         configuredHostsResolver.resolveConfiguredHosts(providedAddresses -> {
             synchronized (mutex) {
                 lastResolvedAddresses = providedAddresses;
-                logger.trace("probing resolved transport addresses {}", providedAddresses);
+                SourceLogger.info(this.getClass(),"handleWakeUp() probing resolved address{} by providedAddresses",providedAddresses);
                 providedAddresses.forEach(this::startProbe);
             }
         });
 
+        //提交延迟任务
         transportService.getThreadPool().scheduleUnlessShuttingDown(findPeersInterval, Names.GENERIC, new AbstractRunnable() {
             @Override
             public boolean isForceExecution() {
@@ -292,6 +297,7 @@ public abstract class PeerFinder {
             @Override
             protected void doRun() {
                 synchronized (mutex) {
+                    //再次调用handleWakeUp()
                     if (handleWakeUp() == false) {
                         return;
                     }
@@ -310,13 +316,20 @@ public abstract class PeerFinder {
 
     protected void startProbe(TransportAddress transportAddress) {
         assert holdsLock() : "PeerFinder mutex not held";
+
+        SourceLogger.info(this.getClass(),"startProbe({}) locaNode:[{}], active:[{}]",
+            transportAddress,
+            transportAddress.equals(getLocalNode().getAddress()),
+            active
+            );
+
         if (active == false) {
             logger.trace("startProbe({}) not running", transportAddress);
             return;
         }
 
         if (transportAddress.equals(getLocalNode().getAddress())) {
-            logger.trace("startProbe({}) not probing local node", transportAddress);
+            SourceLogger.info(this.getClass(),"startProbe({}) not probing local node,return!", transportAddress);
             return;
         }
 
@@ -349,10 +362,12 @@ public abstract class PeerFinder {
 
             if (discoveryNode != null) {
                 if (transportService.nodeConnected(discoveryNode)) {
+                    SourceLogger.info(this.getClass(),"Peer.handleWakeUp() connected to {}",discoveryNode);
                     if (peersRequestInFlight == false) {
                         requestPeers();
                     }
                 } else {
+                    SourceLogger.info(this.getClass(),"Peer.handleWakeUp() failed connected to {}",discoveryNode);
                     logger.trace("{} no longer connected", this);
                     return true;
                 }
@@ -366,7 +381,7 @@ public abstract class PeerFinder {
             assert getDiscoveryNode() == null : "unexpectedly connected to " + getDiscoveryNode();
             assert active;
 
-            logger.trace("{} attempting connection", this);
+            SourceLogger.info(this.getClass(),"create Peer and attempting connection[{}]", this.transportAddress.getAddress());
             transportAddressConnector.connectToRemoteMasterNode(transportAddress, new ActionListener<DiscoveryNode>() {
                 @Override
                 public void onResponse(DiscoveryNode remoteNode) {
@@ -389,6 +404,7 @@ public abstract class PeerFinder {
                 @Override
                 public void onFailure(Exception e) {
                     logger.debug(() -> new ParameterizedMessage("{} connection failed", Peer.this), e);
+                    SourceLogger.info(Peer.class,"{} connection failed",Peer.this);
                     synchronized (mutex) {
                         peersByAddress.remove(transportAddress);
                     }
@@ -409,7 +425,6 @@ public abstract class PeerFinder {
                 return;
             }
 
-            logger.trace("{} requesting peers", this);
             peersRequestInFlight = true;
 
             final List<DiscoveryNode> knownNodes = getFoundPeersUnderLock();
@@ -479,6 +494,10 @@ public abstract class PeerFinder {
                 transportRequest = new PeersRequest(getLocalNode(), knownNodes);
                 transportResponseHandler = peersResponseHandler;
             }
+            SourceLogger.info(this.getClass(),"send requesting to peer [{}]! actionName={}",
+                discoveryNode.getHostName(),
+                actionName);
+
             transportService.sendRequest(discoveryNode, actionName,
                 transportRequest,
                 TransportRequestOptions.builder().withTimeout(requestPeersTimeout).build(),
@@ -495,21 +514,5 @@ public abstract class PeerFinder {
         }
     }
 
-    private class Zen1UnicastPingRequestHandler implements TransportRequestHandler<UnicastZenPing.UnicastPingRequest> {
-        @Override
-        public void messageReceived(UnicastZenPing.UnicastPingRequest request, TransportChannel channel, Task task) throws Exception {
-            final PeersRequest peersRequest = new PeersRequest(request.pingResponse.node(),
-                Optional.ofNullable(request.pingResponse.master()).map(Collections::singletonList).orElse(emptyList()));
-            final PeersResponse peersResponse = handlePeersRequest(peersRequest);
-            final List<ZenPing.PingResponse> pingResponses = new ArrayList<>();
-            final ClusterName clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);
-            pingResponses.add(new ZenPing.PingResponse(createDiscoveryNodeWithImpossiblyHighId(transportService.getLocalNode()),
-                peersResponse.getMasterNode().orElse(null),
-                clusterName, ClusterState.UNKNOWN_VERSION));
-            peersResponse.getKnownPeers().forEach(dn -> pingResponses.add(
-                new ZenPing.PingResponse(ZenPing.PingResponse.FAKE_PING_ID,
-                    isZen1Node(dn) ? dn : createDiscoveryNodeWithImpossiblyHighId(dn), null, clusterName, ClusterState.UNKNOWN_VERSION)));
-            channel.sendResponse(new UnicastZenPing.UnicastPingResponse(request.id, pingResponses.toArray(new ZenPing.PingResponse[0])));
-        }
-    }
+
 }

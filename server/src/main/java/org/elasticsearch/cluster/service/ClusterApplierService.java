@@ -35,6 +35,7 @@ import org.elasticsearch.cluster.metadata.ProcessClusterEventTimeoutException;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.lease.Releasable;
@@ -347,6 +348,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         if (!lifecycle.started()) {
             return;
         }
+        SourceLogger.info(ClusterApplierService.class,"submitStateUpdateTask! async source=[{}]",source);
         try {
             UpdateTask updateTask = new UpdateTask(config.priority(), source, new SafeClusterApplyListener(listener, logger), executor);
             if (config.timeout() != null) {
@@ -395,8 +397,6 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             logger.debug("processing [{}]: ignoring, cluster applier service not started", task.source);
             return;
         }
-
-        logger.debug("processing [{}]: execute", task.source);
         final ClusterState previousClusterState = state.get();
 
         long startTimeMS = currentTimeInMillis();
@@ -415,7 +415,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             task.listener.onFailure(task.source, e);
             return;
         }
-
+        //如果没有变化
         if (previousClusterState == newClusterState) {
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, currentTimeInMillis() - startTimeMS));
             logger.debug("processing [{}]: took [{}] no change in cluster state", task.source, executionTime);
@@ -428,7 +428,9 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             } else {
                 logger.debug("cluster state updated, version [{}], source [{}]", newClusterState.version(), task.source);
             }
-            try {
+            try {//如果有变化
+                SourceLogger.info(this.getClass(),"run UpdateTask {} applyChanges!",task.source);
+                //① 应用变化
                 applyChanges(task, previousClusterState, newClusterState, stopWatch);
                 TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, currentTimeInMillis() - startTimeMS));
                 logger.debug("processing [{}]: took [{}] done applying updated cluster state (version: {}, uuid: {})", task.source,
@@ -482,6 +484,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         }
 
         logger.debug("apply cluster state with version {}", newClusterState.version());
+        ////① 调用 ClusterStateAppliers
         callClusterStateAppliers(clusterChangedEvent, stopWatch);
 
         nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
@@ -520,6 +523,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     }
 
     private void callClusterStateListeners(ClusterChangedEvent clusterChangedEvent, StopWatch stopWatch) {
+        SourceLogger.info(this.getClass(),"call ClusterStateListeners");
         Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
             try {
                 logger.trace("calling [{}] with change to version [{}]", listener, clusterChangedEvent.state().version());
