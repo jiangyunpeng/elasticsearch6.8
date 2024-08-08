@@ -24,6 +24,7 @@ import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.node.DiscoveryNodeFilters;
 import org.elasticsearch.cluster.routing.allocation.IndexMetadataUpdater;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.ImmutableOpenIntMap;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.collect.MapBuilder;
@@ -1359,6 +1360,12 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
             }
 
             final String uuid = settings.get(SETTING_INDEX_UUID, INDEX_UUID_NA_VALUE);
+
+            SourceLogger.info(this.getClass(),"build IndexMetaData! index={}, version={} ,shards={}, replicas={} ",
+                index,
+                version,
+                numberOfShards,
+                numberOfReplicas);
 
             return new IndexMetadata(
                     new Index(index, uuid),

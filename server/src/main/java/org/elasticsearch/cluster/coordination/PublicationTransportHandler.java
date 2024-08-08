@@ -19,6 +19,7 @@ import org.elasticsearch.cluster.Diff;
 import org.elasticsearch.cluster.IncompatibleClusterStateVersionException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.Compressor;
 import org.elasticsearch.common.compress.CompressorFactory;
@@ -273,6 +274,7 @@ public class PublicationTransportHandler {
             sendFullVersion = previousState.getBlocks().disableStatePersistence();
         }
 
+        //计算增量,会修改 serializedDiffs、serializedStates
         void buildDiffAndSerializeStates() {
             Diff<ClusterState> diff = null;
             for (DiscoveryNode node : discoveryNodes) {
@@ -326,10 +328,12 @@ public class PublicationTransportHandler {
             } else {
                 responseActionListener = listener;
             }
+            //如果目标不在集群列表中,发送完全版本
             if (sendFullVersion || previousState.nodes().nodeExists(destination) == false) {
                 logger.trace("sending full cluster state version [{}] to [{}]", newState.version(), destination);
                 sendFullClusterState(destination, responseActionListener);
             } else {
+                //否则发送增量版本
                 logger.trace("sending cluster state diff for version [{}] to [{}]", newState.version(), destination);
                 sendClusterStateDiff(destination, responseActionListener);
             }
@@ -338,38 +342,41 @@ public class PublicationTransportHandler {
         public void sendApplyCommit(DiscoveryNode destination, ApplyCommitRequest applyCommitRequest,
                                     ActionListener<TransportResponse.Empty> listener) {
             assert transportService.getThreadPool().getThreadContext().isSystemContext();
-                final String actionName;
-                final TransportRequest transportRequest;
-                if (Coordinator.isZen1Node(destination)) {
-                    actionName = PublishClusterStateAction.COMMIT_ACTION_NAME;
-                    transportRequest = new PublishClusterStateAction.CommitClusterStateRequest(newState.stateUUID());
-                } else {
-                    actionName = COMMIT_STATE_ACTION_NAME;
-                    transportRequest = applyCommitRequest;
+            final String actionName;
+            final TransportRequest transportRequest;
+            if (Coordinator.isZen1Node(destination)) {
+                actionName = PublishClusterStateAction.COMMIT_ACTION_NAME;
+                transportRequest = new PublishClusterStateAction.CommitClusterStateRequest(newState.stateUUID());
+            } else {
+                actionName = COMMIT_STATE_ACTION_NAME;
+                transportRequest = applyCommitRequest;
+            }
+
+            SourceLogger.info(PublicationContext.class,"sendApplyCommit action[{}] to [{}]",COMMIT_STATE_ACTION_NAME,destination);
+
+            transportService.sendRequest(destination, actionName, transportRequest, STATE_REQUEST_OPTIONS,
+            new TransportResponseHandler<TransportResponse.Empty>() {
+
+                @Override
+                public TransportResponse.Empty read(StreamInput in) {
+                    return TransportResponse.Empty.INSTANCE;
                 }
-                transportService.sendRequest(destination, actionName, transportRequest, STATE_REQUEST_OPTIONS,
-                new TransportResponseHandler<TransportResponse.Empty>() {
 
-                    @Override
-                    public TransportResponse.Empty read(StreamInput in) {
-                        return TransportResponse.Empty.INSTANCE;
-                    }
+                @Override
+                public void handleResponse(TransportResponse.Empty response) {
+                    listener.onResponse(response);
+                }
 
-                    @Override
-                    public void handleResponse(TransportResponse.Empty response) {
-                        listener.onResponse(response);
-                    }
+                @Override
+                public void handleException(TransportException exp) {
+                    listener.onFailure(exp);
+                }
 
-                    @Override
-                    public void handleException(TransportException exp) {
-                        listener.onFailure(exp);
-                    }
-
-                    @Override
-                    public String executor() {
-                        return ThreadPool.Names.GENERIC;
-                    }
-                });
+                @Override
+                public String executor() {
+                    return ThreadPool.Names.GENERIC;
+                }
+            });
         }
 
         private void sendFullClusterState(DiscoveryNode destination, ActionListener<PublishWithJoinResponse> listener) {
@@ -443,6 +450,11 @@ public class PublicationTransportHandler {
                     actionName = PUBLISH_STATE_ACTION_NAME;
                     transportResponseHandler = responseHandler;
                 }
+
+                SourceLogger.info(this.getClass(),"send action[{}] with cluster [{}] state to node[{}]",
+                    actionName,
+                    retryWithFullClusterStateOnFailure?"diff":"full",
+                    destination);
                 transportService.sendRequest(destination, actionName, request, STATE_REQUEST_OPTIONS, transportResponseHandler);
             } catch (Exception e) {
                 logger.warn(() -> new ParameterizedMessage("error sending cluster state to {}", destination), e);

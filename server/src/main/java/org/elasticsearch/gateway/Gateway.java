@@ -17,6 +17,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.discovery.zen.ElectMasterService;
 import org.elasticsearch.index.Index;
@@ -44,6 +45,8 @@ public class Gateway {
     public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
         final String[] nodesIds = clusterService.state().nodes().getMasterNodes().keys().toArray(String.class);
         logger.trace("performing state recovery from {}", Arrays.toString(nodesIds));
+        SourceLogger.info("performing state recovery from {}", Arrays.toString(nodesIds));
+
         final TransportNodesListGatewayMetaState.NodesGatewayMetaState nodesState = listGatewayMetaState.list(nodesIds, null).actionGet();
 
         final int requiredAllocation = Math.max(1, minimumMasterNodes);

@@ -11,6 +11,7 @@ package org.elasticsearch.discovery;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.util.SetOnce;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
@@ -218,6 +219,7 @@ public class SeedHostsResolver extends AbstractLifecycleComponent implements Con
                         = hostsProvider.getSeedAddresses(hosts ->
                             resolveHostsLists(cancellableThreads, executorService.get(), logger, hosts, transportService, resolveTimeout));
 
+                    SourceLogger.info(SeedHostsResolver.class, "resolve providedAddresses:[{}]",providedAddresses);
                     consumer.accept(providedAddresses);
                 }
 

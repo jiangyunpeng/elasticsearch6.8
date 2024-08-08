@@ -30,6 +30,7 @@ import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
 import org.elasticsearch.cluster.routing.allocation.command.AllocationCommands;
 import org.elasticsearch.cluster.routing.allocation.decider.AllocationDeciders;
 import org.elasticsearch.cluster.routing.allocation.decider.Decision;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.gateway.GatewayAllocator;
 import org.elasticsearch.gateway.PriorityComparator;
@@ -425,6 +426,7 @@ public class AllocationService {
 
     private void allocateExistingUnassignedShards(RoutingAllocation allocation) {
         allocation.routingNodes().unassigned().sort(PriorityComparator.getAllocationComparator(allocation)); // sort for priority ordering
+        SourceLogger.info(AllocationService.class, "allocateExistingUnassignedShards begin !");
 
         for (final ExistingShardsAllocator existingShardsAllocator : existingShardsAllocators.values()) {
             existingShardsAllocator.beforeAllocation(allocation);
@@ -433,7 +435,7 @@ public class AllocationService {
         final RoutingNodes.UnassignedShards.UnassignedIterator primaryIterator = allocation.routingNodes().unassigned().iterator();
         while (primaryIterator.hasNext()) {
             final ShardRouting shardRouting = primaryIterator.next();
-            if (shardRouting.primary()) {
+            if (shardRouting.primary()) {//主分片GatewayAllocator
                 getAllocatorForShard(shardRouting, allocation).allocateUnassigned(shardRouting, allocation, primaryIterator);
             }
         }
@@ -445,10 +447,11 @@ public class AllocationService {
         final RoutingNodes.UnassignedShards.UnassignedIterator replicaIterator = allocation.routingNodes().unassigned().iterator();
         while (replicaIterator.hasNext()) {
             final ShardRouting shardRouting = replicaIterator.next();
-            if (shardRouting.primary() == false) {
+            if (shardRouting.primary() == false) {//副本分片GatewayAllocator
                 getAllocatorForShard(shardRouting, allocation).allocateUnassigned(shardRouting, allocation, replicaIterator);
             }
         }
+        SourceLogger.info(AllocationService.class, "allocateExistingUnassignedShards end !");
     }
 
     private void disassociateDeadNodes(RoutingAllocation allocation) {

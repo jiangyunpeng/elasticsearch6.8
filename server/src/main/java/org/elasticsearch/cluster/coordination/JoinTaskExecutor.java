@@ -21,6 +21,7 @@ import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RerouteService;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.discovery.zen.ElectMasterService;
 import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
@@ -42,7 +43,7 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
     private final AllocationService allocationService;
 
     private final Logger logger;
-    private final RerouteService rerouteService;
+    private final RerouteService rerouteService;//BatchedRerouteService
 
     private final int minimumMasterNodesOnLocalNode;
 
@@ -153,6 +154,8 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
             results.success(joinTask);
         }
 
+        SourceLogger.info(JoinTaskExecutor.class, "JoinTaskExecutor execute, nodesChange=[{}]", nodesChanged);
+
         if (nodesChanged) {
             rerouteService.reroute("post-join reroute", Priority.HIGH, ActionListener.wrap(
                 r -> logger.trace("post-join reroute completed"),
@@ -197,6 +200,8 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         DiscoveryNodes.Builder nodesBuilder = DiscoveryNodes.builder(currentNodes);
         nodesBuilder.masterNodeId(currentState.nodes().getLocalNodeId());
 
+        SourceLogger.info(this.getClass(), "becomeMasterAndTrimConflictingNodes(),joiningNodes={}", joiningNodes);
+
         for (final Task joinTask : joiningNodes) {
             if (joinTask.isBecomeMasterTask() || joinTask.isFinishElectionTask()) {
                 // noop
@@ -226,7 +231,10 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
             .build();
         logger.trace("becomeMasterAndTrimConflictingNodes: {}", tmpState.nodes());
         allocationService.cleanCaches();
+
         tmpState = PersistentTasksCustomMetadata.disassociateDeadNodes(tmpState);
+
+        //removed dead nodes
         return ClusterState.builder(allocationService.disassociateDeadNodes(tmpState, false, "removed dead nodes on election"));
     }
 

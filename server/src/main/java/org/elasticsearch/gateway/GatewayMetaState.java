@@ -30,6 +30,7 @@ import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.MetadataIndexUpgradeService;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.settings.Settings;
@@ -95,6 +96,8 @@ public class GatewayMetaState implements Closeable {
                       MetadataUpgrader metadataUpgrader, PersistedClusterStateService persistedClusterStateService) {
         assert persistedState.get() == null : "should only start once, but already have " + persistedState.get();
 
+        SourceLogger.info(this.getClass(), " start begin");
+
         if (DiscoveryModule.DISCOVERY_TYPE_SETTING.get(settings).equals(DiscoveryModule.ZEN_DISCOVERY_TYPE)) {
             // only for tests that simulate mixed Zen1/Zen2 clusters, see Zen1IT
             final Tuple<Manifest, Metadata> manifestClusterStateTuple;
@@ -122,8 +125,10 @@ public class GatewayMetaState implements Closeable {
             return;
         }
 
+        //如果是master或者data节点
         if (DiscoveryNode.isMasterNode(settings) || DiscoveryNode.isDataNode(settings)) {
             try {
+                //从磁盘加载 MetaData 、lastAcceptedVersion、currentTerm
                 final PersistedClusterStateService.OnDiskState onDiskState = persistedClusterStateService.loadBestOnDiskState();
 
                 Metadata metadata = onDiskState.metadata;
@@ -171,11 +176,17 @@ public class GatewayMetaState implements Closeable {
                     }
                 }
 
+                SourceLogger.info(this.getClass(),"init ClusterState with data/master node currentTerm={}," +
+                        "lastCommitVotingConfig={}, nodes={}",
+                    persistedState.getCurrentTerm(),
+                    persistedState.getLastAcceptedState().getLastCommittedConfiguration(),//VotingConfiguration
+                    persistedState.getLastAcceptedState().getNodes());
                 this.persistedState.set(persistedState);
             } catch (IOException e) {
                 throw new ElasticsearchException("failed to load metadata", e);
             }
         } else {
+            //如果是协调节点
             final long currentTerm = 0L;
             final ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.get(settings)).build();
             if (persistedClusterStateService.getDataPaths().length > 0) {
@@ -196,8 +207,12 @@ public class GatewayMetaState implements Closeable {
                     throw new UncheckedIOException(e);
                 }
             }
+            SourceLogger.info(this.getClass(),"init ClusterState with ingest node! currentTerm={}, nodes={}",
+                persistedState.get().getCurrentTerm(),
+                persistedState.get().getLastAcceptedState().getNodes());
             persistedState.set(new InMemoryPersistedState(currentTerm, clusterState));
         }
+        SourceLogger.info(this.getClass(), " start end");
     }
 
     // exposed so it can be overridden by tests

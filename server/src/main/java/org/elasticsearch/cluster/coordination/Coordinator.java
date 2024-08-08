@@ -38,6 +38,7 @@ import org.elasticsearch.cluster.service.MasterService;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -258,15 +259,19 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private void handleApplyCommit(ApplyCommitRequest applyCommitRequest, ActionListener<Void> applyListener) {
         synchronized (mutex) {
-            logger.trace("handleApplyCommit: applying commit {}", applyCommitRequest);
+            SourceLogger.info(this.getClass(),"handleApplyCommit start! applying commit {}", applyCommitRequest);
 
+            //① coordinationState.handleCommit(),主要是更新本地状态
             coordinationState.get().handleCommit(applyCommitRequest);
             final ClusterState committedState = hideStateIfNotRecovered(coordinationState.get().getLastAcceptedState());
             applierState = mode == Mode.CANDIDATE ? clusterStateWithNoMasterBlock(committedState) : committedState;
+
+            //② 如果本地是leader，这里不需要更新本地状态
             if (applyCommitRequest.getSourceNode().equals(getLocalNode())) {
                 // master node applies the committed state at the end of the publication process, not here.
                 applyListener.onResponse(null);
             } else {
+                //③ 如果是follower节点(包括master和data)，需要将集群状态在本地复原
                 clusterApplier.onNewClusterState(applyCommitRequest.toString(), () -> applierState,
                     new ClusterApplyListener() {
 
@@ -281,6 +286,8 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                         }
                     });
             }
+
+            SourceLogger.info(this.getClass(),"handleApplyCommit end!");
         }
     }
 

@@ -37,6 +37,7 @@ import org.elasticsearch.common.CheckedConsumer;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.CheckedSupplier;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
@@ -537,6 +538,7 @@ public class IndicesService extends AbstractLifecycleComponent
     public synchronized IndexService createIndex(
             final IndexMetadata indexMetadata, final List<IndexEventListener> builtInListeners,
             final boolean writeDanglingIndices) throws IOException {
+        SourceLogger.info(this.getClass(),"createIndex {}",indexMetadata.getIndex());
         ensureChangesAllowed();
         if (indexMetadata.getIndexUUID().equals(IndexMetadata.INDEX_UUID_NA_VALUE)) {
             throw new IllegalArgumentException("index must have a real UUID found value: [" + indexMetadata.getIndexUUID() + "]");
@@ -645,7 +647,7 @@ public class IndicesService extends AbstractLifecycleComponent
         }
         // we ignore private settings since they are not registered settings
         indexScopedSettings.validate(indexMetadata.getSettings(), true, true, true);
-        logger.debug("creating Index [{}], shards [{}]/[{}] - reason [{}]",
+        SourceLogger.info(this.getClass(),"creating Index [{}], shards [{}]/[{}] - reason [{}]",
             indexMetadata.getIndex(),
             idxSettings.getNumberOfShards(),
             idxSettings.getNumberOfReplicas(),
@@ -768,6 +770,7 @@ public class IndicesService extends AbstractLifecycleComponent
             final RetentionLeaseSyncer retentionLeaseSyncer,
             final DiscoveryNode targetNode,
             final DiscoveryNode sourceNode) throws IOException {
+        SourceLogger.info(this.getClass(),"createShard");
         Objects.requireNonNull(retentionLeaseSyncer);
         ensureChangesAllowed();
         IndexService indexService = indexService(shardRouting.index());

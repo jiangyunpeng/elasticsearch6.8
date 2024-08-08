@@ -9,6 +9,7 @@ package org.elasticsearch.cluster.coordination;
 
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.ParseField;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -311,6 +312,7 @@ public class CoordinationMetadata implements Writeable, ToXContentFragment {
 
     /**
      * A collection of persistent node ids, denoting the voting configuration for cluster state changes.
+     *  管理和维护集群选举配置的一个关键类。其主要作用是定义哪些节点有投票权，并用来决定选举过程中的法定人数（quorum）和有效投票
      */
     public static class VotingConfiguration implements Writeable, ToXContentFragment {
 
@@ -318,7 +320,7 @@ public class CoordinationMetadata implements Writeable, ToXContentFragment {
         public static final VotingConfiguration MUST_JOIN_ELECTED_MASTER = new VotingConfiguration(Collections.singleton(
                 "_must_join_elected_master_"));
 
-        private final Set<String> nodeIds;
+        private final Set<String> nodeIds;//具有投票权的节点ID
 
         public VotingConfiguration(Set<String> nodeIds) {
             this.nodeIds = Collections.unmodifiableSet(new HashSet<>(nodeIds));
@@ -336,7 +338,12 @@ public class CoordinationMetadata implements Writeable, ToXContentFragment {
         public boolean hasQuorum(Collection<String> votes) {
             final HashSet<String> intersection = new HashSet<>(nodeIds);
             intersection.retainAll(votes);
-            return intersection.size() * 2 > nodeIds.size();
+            //交集中的节点数量超过总节点数量的一半，则认为达到法定人数
+            //如果nodeIds为5，投票数intersection为3则超过一半
+            //如果nodeIds为1，投票数intersection为1也满足条件
+            boolean ret = intersection.size() * 2 > nodeIds.size();
+            SourceLogger.info(this.getClass(),"checkQuorum {} votes:[{}] nodes:[{}]",ret,votes,nodeIds);
+            return ret;
         }
 
         public Set<String> getNodeIds() {

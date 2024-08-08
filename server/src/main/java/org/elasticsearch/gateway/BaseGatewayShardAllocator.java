@@ -44,6 +44,7 @@ public abstract class BaseGatewayShardAllocator {
      */
     public void allocateUnassigned(ShardRouting shardRouting, RoutingAllocation allocation,
                                    ExistingShardsAllocator.UnassignedAllocationHandler unassignedAllocationHandler) {
+        //① fetch shard 信息
         final AllocateUnassignedDecision allocateUnassignedDecision = makeAllocationDecision(shardRouting, allocation, logger);
 
         if (allocateUnassignedDecision.isDecisionTaken() == false) {
@@ -51,12 +52,15 @@ public abstract class BaseGatewayShardAllocator {
             return;
         }
 
+        //如果可以恢复
         if (allocateUnassignedDecision.getAllocationDecision() == AllocationDecision.YES) {
+            //执行分配
             unassignedAllocationHandler.initialize(allocateUnassignedDecision.getTargetNode().getId(),
                 allocateUnassignedDecision.getAllocationId(),
                 getExpectedShardSize(shardRouting, allocation),
                 allocation.changes());
         } else {
+            //移除
             unassignedAllocationHandler.removeAndIgnore(allocateUnassignedDecision.getAllocationStatus(), allocation.changes());
         }
     }

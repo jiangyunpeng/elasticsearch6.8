@@ -51,6 +51,7 @@ import org.elasticsearch.cluster.routing.BatchedRerouteService;
 import org.elasticsearch.cluster.routing.RerouteService;
 import org.elasticsearch.cluster.routing.allocation.DiskThresholdMonitor;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.component.Lifecycle;
@@ -1205,6 +1206,7 @@ public class Node implements Closeable {
         @Override
         public DiscoveryNode apply(BoundTransportAddress boundTransportAddress) {
             localNode.set(DiscoveryNode.createLocal(settings, boundTransportAddress.publishAddress(), persistentNodeId));
+            SourceLogger.info(this.getClass(), "create LocalNode nodeId={},hostName={}", this.getNode().getId(), this.getNode().getHostName());
             return localNode.get();
         }
 

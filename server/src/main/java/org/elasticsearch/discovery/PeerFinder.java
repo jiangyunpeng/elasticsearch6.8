@@ -20,6 +20,7 @@ import org.elasticsearch.cluster.coordination.PeersResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
@@ -150,7 +151,11 @@ public abstract class PeerFinder {
             assert peersRequest.getSourceNode().equals(getLocalNode()) == false;
             final List<DiscoveryNode> knownPeers;
             if (active) {
+                //如果已经选出leader，则报错
                 assert leader.isPresent() == false : leader;
+                SourceLogger.info(this.getClass(),"handlePeersRequest! ");
+
+                //如果对方属于master节点，启动探测
                 if (peersRequest.getSourceNode().isMasterNode()) {
                     startProbe(peersRequest.getSourceNode().getAddress());
                 }
@@ -304,8 +309,15 @@ public abstract class PeerFinder {
             return;
         }
 
+        SourceLogger.info(PeerFinder.class,"startProbe({}) locaNode:[{}], active:[{}]",
+            transportAddress,
+            transportAddress.equals(getLocalNode().getAddress()),
+            active
+        );
+
         if (transportAddress.equals(getLocalNode().getAddress())) {
-            logger.trace("startProbe({}) not probing local node", transportAddress);
+            SourceLogger.info(PeerFinder.class,"startProbe({}) not probing local node,return!", transportAddress);
+
             return;
         }
 
@@ -338,10 +350,12 @@ public abstract class PeerFinder {
 
             if (discoveryNode != null) {
                 if (transportService.nodeConnected(discoveryNode)) {
+                    SourceLogger.info(this.getClass(),"Peer.handleWakeUp() connected to {}",discoveryNode);
                     if (peersRequestInFlight == false) {
                         requestPeers();
                     }
                 } else {
+                    SourceLogger.info(this.getClass(),"Peer.handleWakeUp() failed connected to {}",discoveryNode);
                     logger.trace("{} no longer connected", this);
                     return true;
                 }
@@ -355,7 +369,8 @@ public abstract class PeerFinder {
             assert getDiscoveryNode() == null : "unexpectedly connected to " + getDiscoveryNode();
             assert active;
 
-            logger.trace("{} attempting connection", this);
+            SourceLogger.info(this.getClass(),"create Peer and attempting connection[{}]", this.transportAddress.getAddress());
+
             transportAddressConnector.connectToRemoteMasterNode(transportAddress, new ActionListener<DiscoveryNode>() {
                 @Override
                 public void onResponse(DiscoveryNode remoteNode) {
@@ -378,6 +393,7 @@ public abstract class PeerFinder {
                 @Override
                 public void onFailure(Exception e) {
                     logger.debug(() -> new ParameterizedMessage("{} connection failed", Peer.this), e);
+                    SourceLogger.info(Peer.class,"{} connection failed",Peer.this);
                     synchronized (mutex) {
                         peersByAddress.remove(transportAddress);
                     }
@@ -468,6 +484,11 @@ public abstract class PeerFinder {
                 transportRequest = new PeersRequest(getLocalNode(), knownNodes);
                 transportResponseHandler = peersResponseHandler;
             }
+
+            SourceLogger.info(this.getClass(),"send requesting to peer [{}]! actionName={}",
+                discoveryNode.getHostName(),
+                actionName);
+
             transportService.sendRequest(discoveryNode, actionName,
                 transportRequest,
                 TransportRequestOptions.timeout(requestPeersTimeout),

@@ -21,6 +21,7 @@ import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -892,6 +893,9 @@ public class TransportService extends AbstractLifecycleComponent
     }
 
     private void sendLocalRequest(long requestId, final String action, final TransportRequest request, TransportRequestOptions options) {
+        if (action != null && action.contains("internal")) {
+            SourceLogger.info(this.getClass(), "sendLocalRequest action={}", action);
+        }
         final DirectResponseChannel channel = new DirectResponseChannel(localNode, action, requestId, this, threadPool);
         try {
             onRequestSent(localNode, requestId, action, request, options);

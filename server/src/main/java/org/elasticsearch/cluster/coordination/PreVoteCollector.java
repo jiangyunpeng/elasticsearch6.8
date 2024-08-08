@@ -176,13 +176,16 @@ public class PreVoteCollector {
         }
 
         private void handlePreVoteResponse(final PreVoteResponse response, final DiscoveryNode sender) {
+            //① 如果当前节点已经关闭，则忽略这个预投票响应，并记录日志
             if (isClosed.get()) {
                 logger.debug("{} is closed, ignoring {} from {}", this, response, sender);
                 return;
             }
 
+            //②更新节点所见的最大任期（term），以确保节点不会参与比自己更新的任期的选举
             updateMaxTermSeen.accept(response.getCurrentTerm());
 
+            //③如果对方的term或者version比当前节点的状态更新，则忽略该响应，并记录日志。
             if (response.getLastAcceptedTerm() > clusterState.term()
                 || (response.getLastAcceptedTerm() == clusterState.term()
                 && response.getLastAcceptedVersion() > clusterState.getVersionOrMetadataVersion())) {
@@ -190,6 +193,7 @@ public class PreVoteCollector {
                 return;
             }
 
+            //④记录预投票响应：将预投票响应存储到 preVotesReceived 集合中。
             preVotesReceived.put(sender, response);
 
             // create a fake VoteCollection based on the pre-votes and check if there is an election quorum
@@ -197,10 +201,12 @@ public class PreVoteCollector {
             final DiscoveryNode localNode = clusterState.nodes().getLocalNode();
             final PreVoteResponse localPreVoteResponse = getPreVoteResponse();
 
+            //把preVotesReceived 转为 VoteCollection
             preVotesReceived.forEach((node, preVoteResponse) -> voteCollection.addJoinVote(
                 new Join(node, localNode, preVoteResponse.getCurrentTerm(),
                 preVoteResponse.getLastAcceptedTerm(), preVoteResponse.getLastAcceptedVersion())));
 
+            //检查选举法定人数：使用 electionStrategy 检查是否达到了选举所需的法定人数。如果未达到，则记录日志并返回。
             if (electionStrategy.isElectionQuorum(clusterState.nodes().getLocalNode(), localPreVoteResponse.getCurrentTerm(),
                 localPreVoteResponse.getLastAcceptedTerm(), localPreVoteResponse.getLastAcceptedVersion(),
                 clusterState.getLastCommittedConfiguration(), clusterState.getLastAcceptedConfiguration(), voteCollection) == false) {
@@ -214,6 +220,7 @@ public class PreVoteCollector {
             }
 
             logger.debug("{} added {} from {}, starting election", this, response, sender);
+            //开始选举
             startElection.run();
         }
 

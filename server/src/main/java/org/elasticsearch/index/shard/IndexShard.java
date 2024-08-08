@@ -51,6 +51,7 @@ import org.elasticsearch.common.CheckedConsumer;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.CheckedRunnable;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.lease.Releasable;
@@ -2741,10 +2742,12 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         //           }
         //     }}
         // }
+        SourceLogger.info(this.getClass(),"startRecovery shard:[{}] from type:[{}]",shardPath(),recoveryState.getRecoverySource().getType());
         assert recoveryState.getRecoverySource().equals(shardRouting.recoverySource());
         switch (recoveryState.getRecoverySource().getType()) {
             case EMPTY_STORE:
             case EXISTING_STORE:
+                //注意调用回调::recoverFromStore
                 executeRecovery("from store", recoveryState, recoveryListener, this::recoverFromStore);
                 break;
             case PEER:

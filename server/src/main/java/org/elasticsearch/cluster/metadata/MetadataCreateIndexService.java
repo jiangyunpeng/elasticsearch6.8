@@ -39,6 +39,7 @@ import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.ValidationException;
@@ -315,8 +316,8 @@ public class MetadataCreateIndexService {
     public ClusterState applyCreateIndexRequest(ClusterState currentState, CreateIndexClusterStateUpdateRequest request, boolean silent,
                                                 BiConsumer<Metadata.Builder, IndexMetadata> metadataTransformer) throws Exception {
 
+        SourceLogger.info(this.getClass(),"executing IndexCreationTask for [{}] against cluster state version [{}]", request, currentState.version());
         normalizeRequestSetting(request);
-        logger.trace("executing IndexCreationTask for [{}] against cluster state version [{}]", request, currentState.version());
 
         validate(request, currentState);
 

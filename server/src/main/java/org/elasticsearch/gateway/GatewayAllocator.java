@@ -25,6 +25,7 @@ import org.elasticsearch.cluster.routing.allocation.ExistingShardsAllocator;
 import org.elasticsearch.cluster.routing.allocation.FailedShard;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
@@ -205,7 +206,7 @@ public class GatewayAllocator implements ExistingShardsAllocator {
 
         @Override
         protected void reroute(ShardId shardId, String reason) {
-            logger.trace("{} scheduling reroute for {}", shardId, reason);
+            SourceLogger.info(this.getClass(), "scheduling reroute shardId:[{}] for {}", shardId, reason);
             assert rerouteService != null;
             rerouteService.reroute("async_shard_fetch", Priority.HIGH, ActionListener.wrap(
                 r -> logger.trace("{} scheduled reroute completed for {}", shardId, reason),
@@ -224,11 +225,15 @@ public class GatewayAllocator implements ExistingShardsAllocator {
         @Override
         protected AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards>
                                                                         fetchData(ShardRouting shard, RoutingAllocation allocation) {
+            SourceLogger.info(InternalAsyncFetch.class, "async fetch shard! index=[{}], shardId=[{}]", shard.index().getName(), shard.shardId());
+            //① 创建InternalAsyncFetch
             AsyncShardFetch<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards> fetch =
                 asyncFetchStarted.computeIfAbsent(shard.shardId(),
                     shardId -> new InternalAsyncFetch<>(logger, "shard_started", shardId,
                         IndexMetadata.INDEX_DATA_PATH_SETTING.get(allocation.metadata().index(shard.index()).getSettings()),
                         startedAction));
+
+            //② 调用fetchData()方法获取shard信息
             AsyncShardFetch.FetchResult<TransportNodesListGatewayStartedShards.NodeGatewayStartedShards> shardState =
                     fetch.fetchData(allocation.nodes(), allocation.getIgnoreNodes(shard.shardId()));
 

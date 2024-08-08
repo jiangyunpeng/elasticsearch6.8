@@ -24,6 +24,7 @@ import org.elasticsearch.cluster.routing.RerouteService;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.MasterService;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
@@ -213,6 +214,7 @@ public class JoinHelper {
     }
 
     public void sendJoinRequest(DiscoveryNode destination, long term, Optional<Join> optionalJoin) {
+        SourceLogger.info("sendJoinRequest join={}",optionalJoin.get());
         sendJoinRequest(destination, term, optionalJoin, () -> {
         });
     }
@@ -450,6 +452,8 @@ public class JoinHelper {
                 pendingAsTasks.put(JoinTaskExecutor.newFinishElectionTask(), (source, e) -> {
                 });
                 joinTaskExecutor = joinTaskExecutorGenerator.get();
+
+                //提交两个本地任务
                 masterService.submitStateUpdateTasks(stateUpdateSource, pendingAsTasks, ClusterStateTaskConfig.build(Priority.URGENT),
                     joinTaskExecutor);
             } else {

@@ -37,6 +37,7 @@ import org.elasticsearch.cluster.routing.allocation.StaleShard;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -533,6 +534,11 @@ public class ShardStateAction {
                 primaryTerm,
                 message,
                 timestampMillisRange);
+        SourceLogger.info(this.getClass(),"send shard:[{}/{}] action:[{}] message:[{}]",
+            shardRouting.getIndexName(),
+            shardRouting.shardId(),
+            SHARD_STARTED_ACTION_NAME,
+            message);
         sendShardAction(SHARD_STARTED_ACTION_NAME, currentState, entry, listener);
     }
 
@@ -550,7 +556,7 @@ public class ShardStateAction {
 
         @Override
         public void messageReceived(StartedShardEntry request, TransportChannel channel, Task task) throws Exception {
-            logger.debug("{} received shard started for [{}]", request.shardId, request);
+            SourceLogger.info(ShardStartedTransportHandler.class,"{} received shard started for [{}]", request.shardId, request);
             clusterService.submitStateUpdateTask(
                 "shard-started " + request,
                 request,

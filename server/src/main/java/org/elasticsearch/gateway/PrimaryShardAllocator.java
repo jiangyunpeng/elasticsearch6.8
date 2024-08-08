@@ -24,6 +24,7 @@ import org.elasticsearch.cluster.routing.allocation.NodeAllocationResult.ShardSt
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.cluster.routing.allocation.decider.Decision;
 import org.elasticsearch.cluster.routing.allocation.decider.Decision.Type;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.env.ShardLockObtainFailedException;
 import org.elasticsearch.gateway.AsyncShardFetch.FetchResult;
 import org.elasticsearch.gateway.TransportNodesListGatewayStartedShards.NodeGatewayStartedShards;
@@ -82,8 +83,9 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
             }
             return AllocateUnassignedDecision.no(UnassignedInfo.AllocationStatus.FETCHING_SHARD_DATA, nodeDecisions);
         }
-
+        //①获取数据
         final FetchResult<NodeGatewayStartedShards> shardState = fetchData(unassignedShard, allocation);
+        //如果没有数据
         if (shardState.hasData() == false) {
             allocation.setHasPendingAsyncFetch();
             List<NodeAllocationResult> nodeDecisions = null;
@@ -95,12 +97,14 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
 
         // don't create a new IndexSetting object for every shard as this could cause a lot of garbage
         // on cluster restart if we allocate a boat load of shards
+        // 避免为每个分片创建新的 IndexSetting 对象，因为在集群重启时分配大量分片会产生大量垃圾
         final IndexMetadata indexMetadata = allocation.metadata().getIndexSafe(unassignedShard.index());
         final Set<String> inSyncAllocationIds = indexMetadata.inSyncAllocationIds(unassignedShard.id());
         final boolean snapshotRestore = unassignedShard.recoverySource().getType() == RecoverySource.Type.SNAPSHOT;
 
         assert inSyncAllocationIds.isEmpty() == false;
         // use in-sync allocation ids to select nodes
+        // 使用同步的分配 ID 选择节点
         final NodeShardsResult nodeShardsResult = buildNodeShardsResult(unassignedShard, snapshotRestore,
             allocation.getIgnoreNodes(unassignedShard.shardId()), inSyncAllocationIds, shardState, logger);
         final boolean enoughAllocationsFound = nodeShardsResult.orderedAllocationCandidates.size() > 0;
@@ -110,6 +114,7 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
         if (enoughAllocationsFound == false) {
             if (snapshotRestore) {
                 // let BalancedShardsAllocator take care of allocating this shard
+                // 如果没有找到合适的节点进行数据恢复，将由 BalancedShardsAllocator 负责分配这个分片
                 logger.debug("[{}][{}]: missing local data, will restore from [{}]",
                              unassignedShard.index(), unassignedShard.id(), unassignedShard.recoverySource());
                 return AllocateUnassignedDecision.NOT_TAKEN;
@@ -117,19 +122,22 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
                 // We have a shard that was previously allocated, but we could not find a valid shard copy to allocate the primary.
                 // We could just be waiting for the node that holds the primary to start back up, in which case the allocation for
                 // this shard will be picked up when the node joins and we do another allocation reroute
-                logger.debug("[{}][{}]: not allocating, number_of_allocated_shards_found [{}]",
-                             unassignedShard.index(), unassignedShard.id(), nodeShardsResult.allocationsFound);
+                // 我们有一个之前已分配的分片，但无法找到有效的分片副本来分配主分片。
+                // 可能只是等待持有主分片的节点重新启动，在节点加入时会重新进行分配
+                SourceLogger.info(this.getClass(),"makeAllocationDecision index:[{}][{}]: not allocating, number_of_allocated_shards_found [{}]",
+                    unassignedShard.index(), unassignedShard.id(), nodeShardsResult.allocationsFound);
                 return AllocateUnassignedDecision.no(AllocationStatus.NO_VALID_SHARD_COPY,
                     explain ? buildNodeDecisions(null, shardState, inSyncAllocationIds) : null);
             }
         }
-
+        //基于Decision对node进行分组: yes/no/THROTTLE
         NodesToAllocate nodesToAllocate = buildNodesToAllocate(
             allocation, nodeShardsResult.orderedAllocationCandidates, unassignedShard, false
         );
         DiscoveryNode node = null;
         String allocationId = null;
         boolean throttled = false;
+        //对于yes
         if (nodesToAllocate.yesNodeShards.isEmpty() == false) {
             DecidedNode decidedNode = nodesToAllocate.yesNodeShards.get(0);
             logger.debug("[{}][{}]: allocating [{}] to [{}] on primary allocation",
@@ -139,6 +147,7 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
         } else if (nodesToAllocate.throttleNodeShards.isEmpty() && !nodesToAllocate.noNodeShards.isEmpty()) {
             // The deciders returned a NO decision for all nodes with shard copies, so we check if primary shard
             // can be force-allocated to one of the nodes.
+            // 如果所有节点都返回 NO 决策，则检查是否可以强制将主分片分配到其中一个节点
             nodesToAllocate = buildNodesToAllocate(allocation, nodeShardsResult.orderedAllocationCandidates, unassignedShard, true);
             if (nodesToAllocate.yesNodeShards.isEmpty() == false) {
                 final DecidedNode decidedNode = nodesToAllocate.yesNodeShards.get(0);
@@ -158,8 +167,9 @@ public abstract class PrimaryShardAllocator extends BaseGatewayShardAllocator {
         } else {
             // we are throttling this, since we are allowed to allocate to this node but there are enough allocations
             // taking place on the node currently, ignore it for now
-            logger.debug("[{}][{}]: throttling allocation [{}] to [{}] on primary allocation",
-                         unassignedShard.index(), unassignedShard.id(), unassignedShard, nodesToAllocate.throttleNodeShards);
+            // 如果当前节点的分配数量已满，则延迟分配该分片
+            SourceLogger.info(this.getClass(),"[{}][{}]: throttling allocation [{}] to [{}] on primary allocation",
+                unassignedShard.index(), unassignedShard.id(), unassignedShard, nodesToAllocate.throttleNodeShards);
             throttled = true;
         }
 

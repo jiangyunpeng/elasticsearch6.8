@@ -17,6 +17,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.coordination.ClusterStatePublisher.AckListener;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.transport.TransportException;
 import org.elasticsearch.transport.TransportResponse;
@@ -32,7 +33,7 @@ public abstract class Publication {
 
     protected final Logger logger = LogManager.getLogger(getClass());
 
-    private final List<PublicationTarget> publicationTargets;
+    private final List<PublicationTarget> publicationTargets;   //发布的目标，初始状态NOT_STARTED
     private final PublishRequest publishRequest;
     private final AckListener ackListener;
     private final LongSupplier currentTimeSupplier;
@@ -100,6 +101,7 @@ public abstract class Publication {
         }
 
         if (cancelled == false) {
+            //如果还存在未确认的PublicationTarget，返回
             for (final PublicationTarget target : publicationTargets) {
                 if (target.isActive()) {
                     return;
@@ -107,6 +109,7 @@ public abstract class Publication {
             }
         }
 
+        //如果 ApplyCommitRequest 不存在
         if (applyCommitRequest.isPresent() == false) {
             logger.debug("onPossibleCompletion: [{}] commit failed", this);
             assert isCompleted == false;
@@ -117,7 +120,10 @@ public abstract class Publication {
 
         assert isCompleted == false;
         isCompleted = true;
+
+        //如果发送的Possible已经全部完成(包括commit)
         onCompletion(true);
+
         assert applyCommitRequest.isPresent();
         logger.trace("onPossibleCompletion: [{}] was successful", this);
     }
@@ -140,6 +146,9 @@ public abstract class Publication {
     }
 
     private void onPossibleCommitFailure() {
+        SourceLogger.info(this.getClass(),"check PublishQuorum begin");
+
+        //applyCommitRequest不为空,说明publish收到超过一半ack
         if (applyCommitRequest.isPresent()) {
             onPossibleCompletion();
             return;
@@ -147,13 +156,16 @@ public abstract class Publication {
 
         final CoordinationState.VoteCollection possiblySuccessfulNodes = new CoordinationState.VoteCollection();
         for (PublicationTarget publicationTarget : publicationTargets) {
+            //如果未来可能进入COMMIT状态
             if (publicationTarget.mayCommitInFuture()) {
+                //添加投票
                 possiblySuccessfulNodes.addVote(publicationTarget.discoveryNode);
             } else {
                 assert publicationTarget.isFailed() : publicationTarget;
             }
         }
 
+        //如果发送的publicationTargets未构成法定人数,提前抛出异常
         if (isPublishQuorum(possiblySuccessfulNodes) == false) {
             logger.debug("onPossibleCommitFailure: non-failed nodes {} do not form a quorum, so {} cannot succeed",
                 possiblySuccessfulNodes, this);
@@ -161,6 +173,7 @@ public abstract class Publication {
             publicationTargets.stream().filter(PublicationTarget::isActive).forEach(pt -> pt.setFailed(e));
             onPossibleCompletion();
         }
+        SourceLogger.info(this.getClass(),"check PublishQuorum end");
     }
 
     protected abstract void onCompletion(boolean committed);
@@ -238,15 +251,19 @@ public abstract class Publication {
 
         void handlePublishResponse(PublishResponse publishResponse) {
             assert isWaitingForQuorum() : this;
-            logger.trace("handlePublishResponse: handling [{}] from [{}])", publishResponse, discoveryNode);
+            SourceLogger.info(this.getClass(),"handlePublishResponse! source=[{}] state=[{}]",discoveryNode,state);
+
+            //已经超过半数直接发送ApplyCommit
             if (applyCommitRequest.isPresent()) {
                 sendApplyCommit();
             } else {
                 try {
+                    //这里会收集投票，超过半数会初始化applyCommitRequest
                     Publication.this.handlePublishResponse(discoveryNode, publishResponse).ifPresent(applyCommit -> {
                         assert applyCommitRequest.isPresent() == false;
                         applyCommitRequest = Optional.of(applyCommit);
                         ackListener.onCommit(TimeValue.timeValueMillis(currentTimeSupplier.getAsLong() - startTime));
+                        //过滤出isWaitingForQuorum状态的PublicationTarget
                         publicationTargets.stream().filter(PublicationTarget::isWaitingForQuorum)
                             .forEach(PublicationTarget::sendApplyCommit);
                     });
@@ -319,6 +336,7 @@ public abstract class Publication {
             return state == PublicationTargetState.FAILED;
         }
 
+        //用于处理发送给PublicationTarget收到的结果，一个 PublishResponseHandler 对应一个 PublicationTarget
         private class PublishResponseHandler implements ActionListener<PublishWithJoinResponse> {
 
             @Override
@@ -329,6 +347,7 @@ public abstract class Publication {
                     return;
                 }
 
+                //如果带有Join
                 if (response.getJoin().isPresent()) {
                     final Join join = response.getJoin().get();
                     assert discoveryNode.equals(join.getSourceNode());
@@ -342,6 +361,8 @@ public abstract class Publication {
 
                 assert state == PublicationTargetState.SENT_PUBLISH_REQUEST : state + " -> " + PublicationTargetState.WAITING_FOR_QUORUM;
                 state = PublicationTargetState.WAITING_FOR_QUORUM;
+                //这里会修改state的状态->WAITING_FOR_QUORUM
+
                 handlePublishResponse(response.getPublishResponse());
 
                 assert publicationCompletedIffAllTargetsInactiveOrCancelled();
@@ -369,9 +390,13 @@ public abstract class Publication {
                         discoveryNode);
                     return;
                 }
+                SourceLogger.info(ApplyCommitResponseHandler.class,"handle commit response begin! from [{}]",discoveryNode);
+                //更新状态 state = PublicationTargetState.APPLIED_COMMIT
                 setAppliedCommit();
+                //publish完成
                 onPossibleCompletion();
                 assert publicationCompletedIffAllTargetsInactiveOrCancelled();
+                SourceLogger.info(ApplyCommitResponseHandler.class,"handle commit response end!");
             }
 
             @Override
