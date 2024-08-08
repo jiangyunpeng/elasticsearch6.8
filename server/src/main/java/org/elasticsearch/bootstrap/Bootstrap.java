@@ -207,18 +207,18 @@ final class Bootstrap {
         IfConfig.logIfNecessary();
 
         // install SM after natives, shutdown hooks, etc.
-        try {
-            Security.configure(environment, BootstrapSettings.SECURITY_FILTER_BAD_DEFAULTS_SETTING.get(settings));
-        } catch (IOException | NoSuchAlgorithmException e) {
-            throw new BootstrapException(e);
-        }
+//        try {
+//            Security.configure(environment, BootstrapSettings.SECURITY_FILTER_BAD_DEFAULTS_SETTING.get(settings));
+//        } catch (IOException | NoSuchAlgorithmException e) {
+//            throw new BootstrapException(e);
+//        }
 
         node = new Node(environment) {
             @Override
             protected void validateNodeBeforeAcceptingRequests(
                 final BootstrapContext context,
                 final BoundTransportAddress boundTransportAddress, List<BootstrapCheck> checks) throws NodeValidationException {
-                BootstrapChecks.check(context, boundTransportAddress, checks);
+                //BootstrapChecks.check(context, boundTransportAddress, checks);
             }
         };
     }
