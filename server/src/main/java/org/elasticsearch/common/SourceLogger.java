@@ -117,8 +117,12 @@ public class SourceLogger {
                 return;
             }
         }
-        //logQueue.add(log);
-        System.out.println(log);
+//        logQueue.add(log);
+//
+        if(System.getenv("ES_SOURCE_LOGGER")!=null){
+            System.out.println(log);
+        }
+//        System.out.println(log);
     }
 
 

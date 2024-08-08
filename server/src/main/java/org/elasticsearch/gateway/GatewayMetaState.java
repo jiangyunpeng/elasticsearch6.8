@@ -207,10 +207,11 @@ public class GatewayMetaState implements Closeable {
                     throw new UncheckedIOException(e);
                 }
             }
+            persistedState.set(new InMemoryPersistedState(currentTerm, clusterState));
+            //注意必须persistedState.set之后才能get
             SourceLogger.info(this.getClass(),"init ClusterState with ingest node! currentTerm={}, nodes={}",
                 persistedState.get().getCurrentTerm(),
                 persistedState.get().getLastAcceptedState().getNodes());
-            persistedState.set(new InMemoryPersistedState(currentTerm, clusterState));
         }
         SourceLogger.info(this.getClass(), " start end");
     }

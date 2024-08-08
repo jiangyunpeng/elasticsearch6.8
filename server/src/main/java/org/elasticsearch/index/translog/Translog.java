@@ -13,6 +13,7 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -1679,7 +1680,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
                 iterator.remove();
                 IOUtils.closeWhileHandlingException(reader);
                 final Path translogPath = reader.path();
-                logger.trace("delete translog file [{}], not referenced and not current anymore", translogPath);
+                SourceLogger.info(this.getClass(),"delete translog file [{}], not referenced and not current anymore", translogPath);
                 // The checkpoint is used when opening the translog to know which files should be recovered from.
                 // We now update the checkpoint to ignore the file we are going to remove.
                 // Note that there is a provision in recoverFromFiles to allow for the case where we synced the checkpoint
