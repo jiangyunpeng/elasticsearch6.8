@@ -97,9 +97,10 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         boolean nodesChanged = false;
         ClusterState.Builder newState;
 
+        //当前是follower执行
         if (joiningNodes.size() == 1 && joiningNodes.get(0).isFinishElectionTask()) {
             return results.successes(joiningNodes).build(currentState);
-        } else if (currentNodes.getMasterNode() == null && joiningNodes.stream().anyMatch(Task::isBecomeMasterTask)) {
+        } else if (currentNodes.getMasterNode() == null && joiningNodes.stream().anyMatch(Task::isBecomeMasterTask)) { //当前是leader
             assert joiningNodes.stream().anyMatch(Task::isFinishElectionTask)
                 : "becoming a master but election is not finished " + joiningNodes;
             // use these joins to try and become the master.

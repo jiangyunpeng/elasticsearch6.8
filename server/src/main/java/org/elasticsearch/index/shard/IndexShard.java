@@ -1626,7 +1626,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         Translog.Operation operation;
         while ((operation = snapshot.next()) != null) {
             try {
-                logger.trace("[translog] recover op {}", operation);
+                SourceLogger.info(IndexShard.class,"[translog] [{}] recover op {}",path.getShardId(), operation);
                 Engine.Result result = applyTranslogOperation(engine, operation, origin);
                 switch (result.getResultType()) {
                     case FAILURE:
@@ -1675,6 +1675,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         final Engine.TranslogRecoveryRunner translogRecoveryRunner = (engine, snapshot) -> {
             translogRecoveryStats.totalOperations(snapshot.totalOperations());
             translogRecoveryStats.totalOperationsOnStart(snapshot.totalOperations());
+            //执行 TranslogRecovery 逻辑
             return runTranslogRecovery(engine, snapshot, Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY,
                 translogRecoveryStats::incrementRecoveredOperations);
         };
@@ -2810,7 +2811,10 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     private void executeRecovery(String reason, RecoveryState recoveryState, PeerRecoveryTargetService.RecoveryListener recoveryListener,
                                  CheckedConsumer<ActionListener<Boolean>, Exception> action) {
+
         markAsRecovering(reason, recoveryState); // mark the shard as recovering on the cluster state thread
+
+        //这里包装了action,如果action执行成功，会调用recoveryListener.onRecoveryDone，否则调用recoveryListener.onRecoveryFailure
         threadPool.generic().execute(ActionRunnable.wrap(ActionListener.wrap(r -> {
                 if (r) {
                     recoveryListener.onRecoveryDone(recoveryState, getTimestampMillisRange());

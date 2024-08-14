@@ -35,23 +35,40 @@ public class SourceLogger {
     private static final ThreadLocal<Context> localContext = new ThreadLocal<>();
     private static File logFile;
     private static BufferedWriter writer;
-    private static Filter EXCLUDE_LOGGER_NAME = (logger, log) -> {
+
+    private static List<String> balckClassList = new ArrayList<>();
+    private static List<String> balckPkgList = new ArrayList<>();
+
+
+    private static Filter BLACK_LOGGER_NAME = (logger, log) -> {
         if (logger == null) {
             return false;
         }
-        List<String> balcklist = new ArrayList<>();
-        balcklist.add("FollowerChecker");
-        balcklist.add("FollowersChecker");
-        balcklist.add("VotingConfiguration");
-        balcklist.add("VoteCollection");
-        return balcklist.contains(logger.getSimpleName());
+
+        if (balckClassList.contains(logger.getSimpleName())) {
+            return true;
+        }
+
+        for (String pkg : balckPkgList) {
+            if (logger.getName().startsWith(pkg)) {
+                return true;
+            }
+        }
+        return false;
     };
 
     private static List<Filter> filters = new ArrayList<>();
 
     static {
+        balckClassList.add("FollowerChecker");
+        balckClassList.add("FollowersChecker");
+        balckClassList.add("VotingConfiguration");
+        balckClassList.add("VoteCollection");
+
+        //balckPkgList.add("org.elasticsearch.cluster.coordination");
+
         try {
-            filters.add(EXCLUDE_LOGGER_NAME);
+            filters.add(BLACK_LOGGER_NAME);
 
             //init();
         } catch (Exception e) {
@@ -119,10 +136,10 @@ public class SourceLogger {
         }
 //        logQueue.add(log);
 //
-        if(System.getenv("ES_SOURCE_LOGGER")!=null){
-            System.out.println(log);
-        }
-//        System.out.println(log);
+//        if(System.getenv("ES_SOURCE_LOGGER")!=null){
+//            System.out.println(log);
+//        }
+        System.out.println(log);
     }
 
 
@@ -288,7 +305,7 @@ public class SourceLogger {
                         throw new IllegalArgumentException("expect:}, actually:" + chars[ix]);
                     }
                     if (argsIdx < args.length) {
-                        buffer.append(args[argsIdx] == null ? " " : args[argsIdx].toString());
+                        buffer.append(args[argsIdx] == null ? "null" : args[argsIdx].toString());
                     } else {
                         buffer.append(" ");
                     }

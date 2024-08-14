@@ -15,6 +15,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.coordination.CoordinationState.VoteCollection;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.lease.Releasable;
@@ -181,6 +182,14 @@ public class PreVoteCollector {
                 logger.debug("{} is closed, ignoring {} from {}", this, response, sender);
                 return;
             }
+
+            SourceLogger.info(this.getClass(), "handle PreVoteResponse source=[{}],recTerm:[{}],curTerm:[{}],recVersion:[{}], curVersion:[{}]",
+                sender,
+                response.getLastAcceptedTerm(),
+                clusterState.term(),
+                response.getLastAcceptedVersion(),
+                clusterState.getVersionOrMetadataVersion()
+                );
 
             //②更新节点所见的最大任期（term），以确保节点不会参与比自己更新的任期的选举
             updateMaxTermSeen.accept(response.getCurrentTerm());

@@ -138,6 +138,7 @@ public class JoinHelper {
             StartJoinRequest::new,
             (request, channel, task) -> {
                 final DiscoveryNode destination = request.getSourceNode();
+                //通过 joinLeaderInTerm()创建Join 再发送 cluster/coordination/join
                 sendJoinRequest(destination, currentTermSupplier.getAsLong(), Optional.of(joinLeaderInTerm.apply(request)));
                 channel.sendResponse(Empty.INSTANCE);
             });
@@ -214,7 +215,7 @@ public class JoinHelper {
     }
 
     public void sendJoinRequest(DiscoveryNode destination, long term, Optional<Join> optionalJoin) {
-        SourceLogger.info("sendJoinRequest join={}",optionalJoin.get());
+        SourceLogger.info(this.getClass(),"sendJoinRequest join={}",optionalJoin.get());
         sendJoinRequest(destination, term, optionalJoin, () -> {
         });
     }

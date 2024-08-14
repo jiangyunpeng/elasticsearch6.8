@@ -13,6 +13,7 @@ import org.apache.logging.log4j.message.ParameterizedMessage;
 import org.elasticsearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
@@ -104,6 +105,7 @@ public class ClusterBootstrapService {
     }
 
     void onFoundPeersUpdated() {
+        //本地节点+已探测的节点
         final Set<DiscoveryNode> nodes = getDiscoveredNodes();
         if (bootstrappingPermitted.get() && transportService.getLocalNode().isMasterNode() && bootstrapRequirements.isEmpty() == false
             && isBootstrappedSupplier.getAsBoolean() == false && nodes.stream().noneMatch(Coordinator::isZen1Node)) {
@@ -176,6 +178,7 @@ public class ClusterBootstrapService {
         assert discoveryNodes.stream().allMatch(DiscoveryNode::isMasterNode) : discoveryNodes;
         assert discoveryNodes.stream().noneMatch(Coordinator::isZen1Node) : discoveryNodes;
         assert unsatisfiedRequirements.size() < discoveryNodes.size() : discoveryNodes + " smaller than " + unsatisfiedRequirements;
+
         if (bootstrappingPermitted.compareAndSet(true, false)) {
             doBootstrap(new VotingConfiguration(Stream.concat(discoveryNodes.stream().map(DiscoveryNode::getId),
                 unsatisfiedRequirements.stream().map(s -> BOOTSTRAP_PLACEHOLDER_PREFIX + s))
@@ -189,6 +192,7 @@ public class ClusterBootstrapService {
 
     private void doBootstrap(VotingConfiguration votingConfiguration) {
         assert transportService.getLocalNode().isMasterNode();
+        SourceLogger.info(this.getClass(),"doBootstrap {}",votingConfiguration);
 
         try {
             votingConfigurationConsumer.accept(votingConfiguration);

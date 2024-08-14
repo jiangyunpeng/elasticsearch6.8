@@ -28,6 +28,7 @@ import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -208,6 +209,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
             return;
         }
 
+        SourceLogger.info(this.getClass(), "### applyClusterState begin");
         final ClusterState state = event.state();
 
         // we need to clean the shards and indices we have on this node, since we
@@ -236,6 +238,8 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
         createIndices(state);
 
         createOrUpdateShards(state);
+
+        SourceLogger.info(this.getClass(), "### applyClusterState end");
     }
 
     /**
@@ -597,6 +601,8 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
 
     private void updateShard(DiscoveryNodes nodes, ShardRouting shardRouting, Shard shard, RoutingTable routingTable,
                              ClusterState clusterState) {
+        SourceLogger.info(this.getClass(),"update shard begin");
+
         final ShardRouting currentRoutingEntry = shard.routingEntry();
         assert currentRoutingEntry.isSameAllocation(shardRouting) :
             "local shard has a different allocation id but wasn't cleaned by removeShards. "
@@ -635,6 +641,8 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
                         clusterState);
             }
         }
+
+        SourceLogger.info(this.getClass(),"update shard end");
     }
 
     /**

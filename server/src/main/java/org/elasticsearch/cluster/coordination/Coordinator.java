@@ -297,7 +297,12 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
         synchronized (mutex) {
             final DiscoveryNode sourceNode = publishRequest.getAcceptedState().nodes().getMasterNode();
-            logger.trace("handlePublishRequest: handling [{}] from [{}]", publishRequest, sourceNode);
+            SourceLogger.info(this.getClass(),"handlePublishRequest from[{}]! receive term:[{}] version:[{}],currentTerm:[{}]",
+                sourceNode,
+                publishRequest.getAcceptedState().term(),
+                publishRequest.getAcceptedState().version(),
+                this.getCurrentTerm()
+            );
 
             if (sourceNode.equals(getLocalNode()) && mode != Mode.LEADER) {
                 // Rare case in which we stood down as leader between starting this publication and receiving it ourselves. The publication
@@ -389,6 +394,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     }
 
     private void startElection() {
+        SourceLogger.info("=====Finish preVote! begin to startElection()===================");
         synchronized (mutex) {
             // The preVoteCollector is only active while we are candidate, but it does not call this method with synchronisation, so we have
             // to check our mode again here.
@@ -403,6 +409,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 logger.debug("starting election with {}", startJoinRequest);
                 getDiscoveredNodes().forEach(node -> {
                     if (isZen1Node(node) == false) {
+                        SourceLogger.info(this.getClass(), "create StartJoin! send[{}] to {},currentTerm:{}", startJoinRequest, node,getCurrentTerm());
                         joinHelper.sendStartJoinRequest(startJoinRequest, node);
                     }
                 });
@@ -470,6 +477,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         assert getLocalNode().isMasterNode() : getLocalNode() + " received a join but is not master-eligible";
         logger.trace("handleJoinRequest: as {}, handling {}", mode, joinRequest);
 
+        //如果集群配置为单节点发现模式 (singleNodeDiscovery) 且请求的节点不是当前节点，则拒绝加入请求并调用 joinCallback.onFailure 进行回调。
         if (singleNodeDiscovery && joinRequest.getSourceNode().equals(getLocalNode()) == false) {
             joinCallback.onFailure(new IllegalStateException("cannot join node with [" + DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey() +
                 "] set to [" + DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE  + "] discovery"));
@@ -479,16 +487,28 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         transportService.connectToNode(joinRequest.getSourceNode(), ActionListener.wrap(ignore -> {
             final ClusterState stateForJoinValidation = getStateForMasterService();
 
+            //如果当前节点是leader
             if (stateForJoinValidation.nodes().isLocalNodeElectedMaster()) {
+                //验证节点
                 onJoinValidators.forEach(a -> a.accept(joinRequest.getSourceNode(), stateForJoinValidation));
+                //检查集群状态
                 if (stateForJoinValidation.getBlocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
                     // we do this in a couple of places including the cluster update thread. This one here is really just best effort
                     // to ensure we fail as fast as possible.
                     JoinTaskExecutor.ensureMajorVersionBarrier(joinRequest.getSourceNode().getVersion(),
                         stateForJoinValidation.getNodes().getMinNodeVersion());
                 }
+                SourceLogger.info(this.getClass(),"handleJoinRequest1！ mode=[{}], joinRequest=[{}] connectToNode=[{}]",
+                    mode,
+                    joinRequest,
+                    joinRequest.getSourceNode());
+                //发送验证请求
                 sendValidateJoinRequest(stateForJoinValidation, joinRequest, joinCallback);
             } else {
+                SourceLogger.info(this.getClass(),"handleJoinRequest2！ mode=[{}], joinRequest=[{}] connectToNode=[{}]",
+                    mode,
+                    joinRequest,
+                    joinRequest.getSourceNode());
                 processJoinRequest(joinRequest, joinCallback);
             }
         }, joinCallback::onFailure));
@@ -524,10 +544,13 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
             final CoordinationState coordState = coordinationState.get();
             final boolean prevElectionWon = coordState.electionWon();
-
+            //①如果Join对象不为空，调用handleJoin
             optionalJoin.ifPresent(this::handleJoin);
+
+            //②如果当前是leader会提交 node-join 任务
             joinAccumulator.handleJoinRequest(joinRequest.getSourceNode(), joinCallback);
 
+            //③如果当前是候选人，并且满足法定人数，则成为leader
             if (prevElectionWon == false && coordState.electionWon()) {
                 becomeLeader("handleJoinRequest");
             }
@@ -536,8 +559,8 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     void becomeCandidate(String method) {
         assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
-        logger.debug("{}: coordinator becoming CANDIDATE in term {} (was {}, lastKnownLeader was [{}])",
-            method, getCurrentTerm(), mode, lastKnownLeader);
+        SourceLogger.info(Coordinator.class, "becomeCandidate() in term [{}] mode=[{}] method=[{}]",
+            getCurrentTerm(), mode, method);
 
         if (mode != Mode.CANDIDATE) {
             final Mode prevMode = mode;
@@ -579,8 +602,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         assert mode == Mode.CANDIDATE : "expected candidate but was " + mode;
         assert getLocalNode().isMasterNode() : getLocalNode() + " became a leader but is not master-eligible";
 
-        logger.debug("{}: coordinator becoming LEADER in term {} (was {}, lastKnownLeader was [{}])",
-            method, getCurrentTerm(), mode, lastKnownLeader);
+        SourceLogger.info(this.getClass(), "######## coordination BecomeLeader in term {} ########",this.getCurrentTerm());
 
         mode = Mode.LEADER;
         joinAccumulator.close(mode);
@@ -610,6 +632,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 method, leaderNode, getCurrentTerm(), mode, lastKnownLeader);
         }
 
+        SourceLogger.info(this.getClass(), "######## coordination becomeFollower method[{}]", method);
         final boolean restartLeaderChecker = (mode == Mode.FOLLOWER && Optional.of(leaderNode).equals(lastKnownLeader)) == false;
 
         if (mode != Mode.FOLLOWER) {
@@ -620,6 +643,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         }
 
         lastKnownLeader = Optional.of(leaderNode);
+
         peerFinder.deactivate(leaderNode);
         discoveryUpgradeService.deactivate();
         clusterFormationFailureHelper.stop();
@@ -690,10 +714,16 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     @Override
     protected void doStart() {
         synchronized (mutex) {
+            SourceLogger.info(this.getClass(), "Coordinator doStart begin");
             CoordinationState.PersistedState persistedState = persistedStateSupplier.get();
             coordinationState.set(new CoordinationState(getLocalNode(), persistedState, electionStrategy));
             peerFinder.setCurrentTerm(getCurrentTerm());
             configuredHostsResolver.start();
+            SourceLogger.info(this.getClass(), "set CoordinationState currentTerm={}, localNode={}, lastAcceptedState={}",
+                persistedState.getCurrentTerm(),
+                getLocalNode().getId(),
+                persistedState.getLastAcceptedState().getVotingConfigExclusions());
+
             final ClusterState lastAcceptedState = coordinationState.get().getLastAcceptedState();
             if (lastAcceptedState.metadata().clusterUUIDCommitted()) {
                 logger.info("cluster UUID [{}]", lastAcceptedState.metadata().clusterUUID());
@@ -714,6 +744,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 .build();
             applierState = initialState;
             clusterApplier.setInitialState(initialState);
+            SourceLogger.info(this.getClass(), "Coordinator doStart end");
         }
     }
 
@@ -878,7 +909,8 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     "[knownNodes=" + knownNodes + ", " + votingConfiguration + "]");
             }
 
-            logger.info("setting initial configuration to {}", votingConfiguration);
+            SourceLogger.info(this.getClass(),"setting initial configuration to {}", votingConfiguration);
+
             final CoordinationMetadata coordinationMetadata = CoordinationMetadata.builder(currentState.coordinationMetadata())
                 .lastAcceptedConfiguration(votingConfiguration)
                 .lastCommittedConfiguration(votingConfiguration)
@@ -1072,6 +1104,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     public void publish(ClusterChangedEvent clusterChangedEvent, ActionListener<Void> publishListener, AckListener ackListener) {
         try {
             synchronized (mutex) {
+                //如果当前term不等于clusterChangedEvent中 ClusterState.term，当前term可能会因为StartJoin而被修改
                 if (mode != Mode.LEADER || getCurrentTerm() != clusterChangedEvent.state().term()) {
                     logger.debug(() -> new ParameterizedMessage("[{}] failed publication as node is no longer master for term {}",
                         clusterChangedEvent.source(), clusterChangedEvent.state().term()));
@@ -1099,15 +1132,21 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 final PublicationTransportHandler.PublicationContext publicationContext =
                     publicationHandler.newPublicationContext(clusterChangedEvent);
 
+                //创建 PublishRequest
                 final PublishRequest publishRequest = coordinationState.get().handleClientValue(clusterState);
+                //创建CoordinatorPublication，
                 final CoordinatorPublication publication = new CoordinatorPublication(publishRequest, publicationContext,
                     new ListenableFuture<>(), ackListener, publishListener);
                 currentPublication = Optional.of(publication);
 
                 final DiscoveryNodes publishNodes = publishRequest.getAcceptedState().nodes();
+                //SourceLogger.info(this.getClass(),"handle clusterChangedEvent! mode=[{}]",mode);
+                //设置leader checker
                 leaderChecker.setCurrentNodes(publishNodes);
+                //设置follower checker
                 followersChecker.setCurrentNodes(publishNodes);
                 lagDetector.setTrackedNodes(publishNodes);
+                //发送变更
                 publication.start(followersChecker.getFaultyNodes());
             }
         } catch (Exception e) {
@@ -1182,9 +1221,9 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         }
 
         @Override
-        protected void startProbe(TransportAddress transportAddress) {
+        protected void startProbe(TransportAddress transportAddress,String reason) {
             if (singleNodeDiscovery == false) {
-                super.startProbe(transportAddress);
+                super.startProbe(transportAddress,reason);
             }
         }
 
@@ -1193,10 +1232,13 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             synchronized (mutex) {
                 final Iterable<DiscoveryNode> foundPeers = getFoundPeers();
                 if (mode == Mode.CANDIDATE) {
+                    //把foundPeers 转为VoteCollection
                     final VoteCollection expectedVotes = new VoteCollection();
                     foundPeers.forEach(expectedVotes::addVote);
                     expectedVotes.addVote(Coordinator.this.getLocalNode());
+                    //判断法定人数
                     final boolean foundQuorum = coordinationState.get().isElectionQuorum(expectedVotes);
+                    SourceLogger.info(CoordinatorPeerFinder.class, "Found peer:[{}] foundQuorum:[{}]", foundPeers, foundQuorum);
 
                     if (foundQuorum) {
                         if (electionScheduler == null) {
@@ -1214,6 +1256,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private void startElectionScheduler() {
         assert electionScheduler == null : electionScheduler;
+        SourceLogger.info(Coordinator.class, "=====Start preVoteCollector!=====");
 
         if (getLocalNode().isMasterNode() == false) {
             return;
@@ -1382,6 +1425,8 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         @Override
         protected void onCompletion(boolean committed) {
             assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+            //addListener()方法内部有if判断，如果已经完成会直接调用ActionListener()
+            SourceLogger.info(CoordinatorPublication.class,"onCompletion! addListener");
 
             localNodeAckEvent.addListener(new ActionListener<Void>() {
                 @Override

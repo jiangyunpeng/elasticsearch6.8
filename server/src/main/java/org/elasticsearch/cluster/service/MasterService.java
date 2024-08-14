@@ -30,6 +30,7 @@ import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
@@ -190,6 +191,8 @@ public class MasterService extends AbstractLifecycleComponent {
 
     private void runTasks(TaskInputs taskInputs) {
         final String summary = taskInputs.summary;
+        SourceLogger.info(this.getClass() ,"run task [{}]",summary);
+
         if (!lifecycle.started()) {
             logger.debug("processing [{}]: ignoring, master service not started", summary);
             return;
@@ -205,6 +208,7 @@ public class MasterService extends AbstractLifecycleComponent {
         }
 
         final long computationStartTime = threadPool.relativeTimeInMillis();
+        //① 调用 ClusterStateTaskExecutor.execute()
         final TaskOutputs taskOutputs = calculateTaskOutputs(taskInputs, previousClusterState);
         taskOutputs.notifyFailedTasks();
         final TimeValue computationTime = getTimeSince(computationStartTime);
@@ -235,7 +239,9 @@ public class MasterService extends AbstractLifecycleComponent {
                     }
                 }
 
-                logger.debug("publishing cluster state version [{}]", newClusterState.version());
+                SourceLogger.info(this.getClass(), "publishing cluster state version [{}] cause [{}]", newClusterState.version(),
+                    summary);
+                //②发送事件
                 publish(clusterChangedEvent, taskOutputs, publicationStartTime);
             } catch (Exception e) {
                 handleException(summary, publicationStartTime, newClusterState, e);
@@ -688,6 +694,9 @@ public class MasterService extends AbstractLifecycleComponent {
         ClusterTasksResult<Object> clusterTasksResult;
         try {
             List<Object> inputs = taskInputs.updateTasks.stream().map(tUpdateTask -> tUpdateTask.task).collect(Collectors.toList());
+            //执行ClusterStateTaskExecutor
+            SourceLogger.info(taskInputs.executor.getClass(),"ClusterStateTaskExecutor execute!");
+
             clusterTasksResult = taskInputs.executor.execute(previousClusterState, inputs);
             if (previousClusterState != clusterTasksResult.resultingState &&
                 previousClusterState.nodes().isLocalNodeElectedMaster() &&
@@ -761,7 +770,7 @@ public class MasterService extends AbstractLifecycleComponent {
      * Submits a batch of cluster state update tasks; submitted updates are guaranteed to be processed together,
      * potentially with more tasks of the same executor.
      *
-     * @param source   the source of the cluster state update task
+     * @param source   the source of the cluster state update task 说明变更原因
      * @param tasks    a map of update tasks and their corresponding listeners
      * @param config   the cluster state update task configuration
      * @param executor the cluster state update task executor; tasks
@@ -776,6 +785,7 @@ public class MasterService extends AbstractLifecycleComponent {
         if (!lifecycle.started()) {
             return;
         }
+        SourceLogger.info(this.getClass()," submit StateUpdateTasks source={}, tasks={}",source,tasks);
         final ThreadContext threadContext = threadPool.getThreadContext();
         final Supplier<ThreadContext.StoredContext> supplier = threadContext.newRestorableContext(true);
         try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {

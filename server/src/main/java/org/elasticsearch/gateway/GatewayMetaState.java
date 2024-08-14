@@ -300,6 +300,7 @@ public class GatewayMetaState implements Closeable {
                 incrementalClusterStateWriter.setIncrementalWrite(false);
                 return;
             }
+            SourceLogger.info(this.getClass(),"applyClusterState {}",event.source());
 
             try {
                 // Hack: This is to ensure that non-master-eligible Zen2 nodes always store a current term

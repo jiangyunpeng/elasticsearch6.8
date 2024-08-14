@@ -140,11 +140,10 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
 
     @Override
     public void clusterChanged(final ClusterChangedEvent event) {
-        SourceLogger.info(this.getClass(),"#handle ClusterChangedEvent");
         if (lifecycle.stoppedOrClosed()) {
             return;
         }
-
+        SourceLogger.info(this.getClass(),"#handle ClusterChangedEvent");
         final ClusterState state = event.state();
 
         if (state.nodes().isLocalNodeElectedMaster() == false) {
@@ -198,6 +197,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
 
     private void performStateRecovery(final boolean enforceRecoverAfterTime, final String reason) {
         SourceLogger.info(this.getClass(),"performStateRecovery {}",reason);
+
         if (enforceRecoverAfterTime && recoverAfterTime != null) {
             if (scheduledRecovery.compareAndSet(false, true)) {
                 logger.info("delaying initial state recovery for [{}]. {}", recoverAfterTime, reason);

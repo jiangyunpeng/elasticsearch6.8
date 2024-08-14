@@ -46,6 +46,7 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.lucene.LoggerInfoStream;
@@ -487,7 +488,9 @@ public class InternalEngine extends Engine {
         final int opsRecovered;
         final long localCheckpoint = getProcessedLocalCheckpoint();
         if (localCheckpoint < recoverUpToSeqNo) {
+            SourceLogger.info(this.getClass(),"remove fromSeqNo:[{}] to toSeqNo:[{}]");
             try (Translog.Snapshot snapshot = translog.newSnapshot(localCheckpoint + 1, recoverUpToSeqNo)) {
+                //调用 IndexShard.runTranslogRecovery()
                 opsRecovered = translogRecoveryRunner.run(this, snapshot);
             } catch (Exception e) {
                 throw new EngineException(shardId, "failed to recover from translog", e);

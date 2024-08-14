@@ -170,7 +170,7 @@ public class CoordinationState {
             getCurrentTerm(),
             getLastAcceptedTerm());
 
-        //如果收到的term小于或等于当前term，忽略
+        //①如果收到的startJoinRequest的term小于或等于当前，忽略
         if (startJoinRequest.getTerm() <= getCurrentTerm()) {
             logger.debug("handleStartJoin: ignoring [{}] as term provided is not greater than current term [{}]",
                 startJoinRequest, getCurrentTerm());
@@ -191,7 +191,7 @@ public class CoordinationState {
             }
             logger.debug("handleStartJoin: discarding {}: {}", joinVotes, reason);
         }
-
+        //② 说明收到的比当前新，更新当前term
         persistedState.setCurrentTerm(startJoinRequest.getTerm());
         assert getCurrentTerm() == startJoinRequest.getTerm();
         lastPublishedVersion = 0;
@@ -201,11 +201,12 @@ public class CoordinationState {
         joinVotes = new VoteCollection();
         publishVotes = new VoteCollection();
 
-        SourceLogger.info(this.getClass(), "create Join,sourceNode={},currentTerTerm={},lastAcceptedTerm={}",
-            startJoinRequest.getSourceNode(),
-            getCurrentTerm(),
-            getLastAcceptedTerm());
-        //创建Join时，sourceNode=localNode,target=startJoinRequest.getSourceNode()
+//        SourceLogger.info(this.getClass(), "create Join,sourceNode={},currentTerTerm={},lastAcceptedTerm={}",
+//            startJoinRequest.getSourceNode(),
+//            getCurrentTerm(),
+//            getLastAcceptedTerm());
+
+        //③ 创建Join时，sourceNode=localNode,target=startJoinRequest.getSourceNode()
         return new Join(localNode, startJoinRequest.getSourceNode(), getCurrentTerm(), getLastAcceptedTerm(),
             getLastAcceptedVersionOrMetadataVersion());
     }
@@ -220,8 +221,9 @@ public class CoordinationState {
     public boolean handleJoin(Join join) {
         assert join.targetMatches(localNode) : "handling join " + join + " for the wrong node " + localNode;
 
-        SourceLogger.info(this.getClass(), "handling join [{}] lastAcceptedTerm={}",join,getLastAcceptedTerm());
+        //SourceLogger.info(this.getClass(), "handling join [{}] lastAcceptedTerm={}",join,getLastAcceptedTerm());
 
+        //① 如果收到join.term 不等于当前term，拒绝
         if (join.getTerm() != getCurrentTerm()) {
             logger.debug("handleJoin: ignored join due to term mismatch (expected: [{}], actual: [{}])",
                 getCurrentTerm(), join.getTerm());
@@ -241,7 +243,7 @@ public class CoordinationState {
             throw new CoordinationStateRejectedException("incoming last accepted term " + join.getLastAcceptedTerm() +
                 " of join higher than current last accepted term " + lastAcceptedTerm);
         }
-
+        //② 如果Join.lastAcceptedVersion 大于本地 version
         if (join.getLastAcceptedTerm() == lastAcceptedTerm && join.getLastAcceptedVersion() > getLastAcceptedVersionOrMetadataVersion()) {
             logger.debug(
                 "handleJoin: ignored join as joiner has a better last accepted version (expected: <=[{}], actual: [{}]) in term {}",

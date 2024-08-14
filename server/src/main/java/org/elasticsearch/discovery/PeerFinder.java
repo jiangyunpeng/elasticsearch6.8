@@ -123,7 +123,10 @@ public abstract class PeerFinder {
     public void deactivate(DiscoveryNode leader) {
         final boolean peersRemoved;
         synchronized (mutex) {
-            logger.trace("deactivating and setting leader to {}", leader);
+            //logger.trace("deactivating and setting leader to {}", leader);
+            if (active) {
+                SourceLogger.info(PeerFinder.class, "disable PeerFinder! find leader:[{}]", leader);
+            }
             active = false;
             peersRemoved = handleWakeUp();
             this.leader = Optional.of(leader);
@@ -147,19 +150,19 @@ public abstract class PeerFinder {
     }
 
     PeersResponse handlePeersRequest(PeersRequest peersRequest) {
+        //处理收到的peersRequest， C->S,S端
         synchronized (mutex) {
             assert peersRequest.getSourceNode().equals(getLocalNode()) == false;
             final List<DiscoveryNode> knownPeers;
             if (active) {
                 //如果已经选出leader，则报错
                 assert leader.isPresent() == false : leader;
-                SourceLogger.info(this.getClass(),"handlePeersRequest! ");
 
                 //如果对方属于master节点，启动探测
                 if (peersRequest.getSourceNode().isMasterNode()) {
-                    startProbe(peersRequest.getSourceNode().getAddress());
+                    startProbe(peersRequest.getSourceNode().getAddress(), "handlePeersRequest#master");
                 }
-                peersRequest.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach(this::startProbe);
+                peersRequest.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach((e) -> startProbe(e, "handlePeersRequest#knownPeers"));
                 knownPeers = getFoundPeersUnderLock();
             } else {
                 assert leader.isPresent() || lastAcceptedNodes == null;
@@ -250,6 +253,7 @@ public abstract class PeerFinder {
      */
     private boolean handleWakeUp() {
         assert holdsLock() : "PeerFinder mutex not held";
+        //SourceLogger.info(PeerFinder.class, "execute handleWakeUp()! peersByAddress=[{}]", peersByAddress);
 
         final boolean peersRemoved = peersByAddress.values().removeIf(Peer::handleWakeUp);
 
@@ -258,19 +262,20 @@ public abstract class PeerFinder {
             return peersRemoved;
         }
 
-        logger.trace("probing master nodes from cluster state: {}", lastAcceptedNodes);
+        //SourceLogger.info(this.getClass(),"handleWakeUp() probing master nodes from cluster state: {}", lastAcceptedNodes);
         for (ObjectCursor<DiscoveryNode> discoveryNodeObjectCursor : lastAcceptedNodes.getMasterNodes().values()) {
-            startProbe(discoveryNodeObjectCursor.value.getAddress());
+            startProbe(discoveryNodeObjectCursor.value.getAddress(), "handleWakeUp#lastAcceptedNodes");
         }
 
         configuredHostsResolver.resolveConfiguredHosts(providedAddresses -> {
             synchronized (mutex) {
                 lastResolvedAddresses = providedAddresses;
-                logger.trace("probing resolved transport addresses {}", providedAddresses);
-                providedAddresses.forEach(this::startProbe);
+                //SourceLogger.info(this.getClass(),"handleWakeUp() probing resolved address{} by providedAddresses",providedAddresses);
+                providedAddresses.forEach(e -> startProbe(e, "handleWakeUp#resolvedAddress"));
             }
         });
 
+        //提交延迟任务
         transportService.getThreadPool().scheduleUnlessShuttingDown(findPeersInterval, Names.GENERIC, new AbstractRunnable() {
             @Override
             public boolean isForceExecution() {
@@ -302,22 +307,21 @@ public abstract class PeerFinder {
         return peersRemoved;
     }
 
-    protected void startProbe(TransportAddress transportAddress) {
+    protected void startProbe(TransportAddress transportAddress, String reason) {
         assert holdsLock() : "PeerFinder mutex not held";
+
+        SourceLogger.info(this.getClass(), "startProbe({}) locaNode:[{}], reason:[{}]",
+            transportAddress,
+            transportAddress.equals(getLocalNode().getAddress()),
+            reason
+        );
+
         if (active == false) {
             logger.trace("startProbe({}) not running", transportAddress);
             return;
         }
 
-        SourceLogger.info(PeerFinder.class,"startProbe({}) locaNode:[{}], active:[{}]",
-            transportAddress,
-            transportAddress.equals(getLocalNode().getAddress()),
-            active
-        );
-
         if (transportAddress.equals(getLocalNode().getAddress())) {
-            SourceLogger.info(PeerFinder.class,"startProbe({}) not probing local node,return!", transportAddress);
-
             return;
         }
 
@@ -350,12 +354,12 @@ public abstract class PeerFinder {
 
             if (discoveryNode != null) {
                 if (transportService.nodeConnected(discoveryNode)) {
-                    SourceLogger.info(this.getClass(),"Peer.handleWakeUp() connected to {}",discoveryNode);
+                    SourceLogger.info(this.getClass(), "Peer.handleWakeUp() connected to {}", discoveryNode);
                     if (peersRequestInFlight == false) {
                         requestPeers();
                     }
                 } else {
-                    SourceLogger.info(this.getClass(),"Peer.handleWakeUp() failed connected to {}",discoveryNode);
+                    SourceLogger.info(this.getClass(), "Peer.handleWakeUp() failed connected to {}", discoveryNode);
                     logger.trace("{} no longer connected", this);
                     return true;
                 }
@@ -369,7 +373,7 @@ public abstract class PeerFinder {
             assert getDiscoveryNode() == null : "unexpectedly connected to " + getDiscoveryNode();
             assert active;
 
-            SourceLogger.info(this.getClass(),"create Peer and attempting connection[{}]", this.transportAddress.getAddress());
+            SourceLogger.info(this.getClass(), "create Peer and attempting connection[{}]", this.transportAddress.getAddress());
 
             transportAddressConnector.connectToRemoteMasterNode(transportAddress, new ActionListener<DiscoveryNode>() {
                 @Override
@@ -393,7 +397,7 @@ public abstract class PeerFinder {
                 @Override
                 public void onFailure(Exception e) {
                     logger.debug(() -> new ParameterizedMessage("{} connection failed", Peer.this), e);
-                    SourceLogger.info(Peer.class,"{} connection failed",Peer.this);
+                    SourceLogger.info(Peer.class, "{} connection failed", Peer.this);
                     synchronized (mutex) {
                         peersByAddress.remove(transportAddress);
                     }
@@ -428,6 +432,7 @@ public abstract class PeerFinder {
 
                 @Override
                 public void handleResponse(PeersResponse response) {
+                    //处理收到的peersResponse， C->S,C端
                     logger.trace("{} received {}", Peer.this, response);
                     synchronized (mutex) {
                         if (active == false) {
@@ -435,9 +440,9 @@ public abstract class PeerFinder {
                         }
 
                         peersRequestInFlight = false;
-
-                        response.getMasterNode().map(DiscoveryNode::getAddress).ifPresent(PeerFinder.this::startProbe);
-                        response.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach(PeerFinder.this::startProbe);
+                        //对peer响应中包含的地址进行探测
+                        response.getMasterNode().map(DiscoveryNode::getAddress).ifPresent((e) -> startProbe(e, "peersResponse#master"));
+                        response.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach((e) -> startProbe(e, "peersResponse#kownPeer"));
                     }
 
                     if (response.getMasterNode().equals(Optional.of(discoveryNode))) {
@@ -485,7 +490,7 @@ public abstract class PeerFinder {
                 transportResponseHandler = peersResponseHandler;
             }
 
-            SourceLogger.info(this.getClass(),"send requesting to peer [{}]! actionName={}",
+            SourceLogger.info(this.getClass(), "send requesting to peer [{}]! actionName={}",
                 discoveryNode.getHostName(),
                 actionName);
 
