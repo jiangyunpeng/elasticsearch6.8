@@ -409,8 +409,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 logger.debug("starting election with {}", startJoinRequest);
                 getDiscoveredNodes().forEach(node -> {
                     if (isZen1Node(node) == false) {
-                        SourceLogger.info(this.getClass(), "create StartJoin! send[{}] to {},currentTerm:{}", startJoinRequest, node,getCurrentTerm());
-                        joinHelper.sendStartJoinRequest(startJoinRequest, node);
+                        joinHelper.sendStartJoinRequest(startJoinRequest, node,"startJoin",getCurrentTerm());
                     }
                 });
             }
@@ -425,7 +424,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         logger.info("abdicating to {} with term {}", newMaster, startJoinRequest.getTerm());
         getLastAcceptedState().nodes().mastersFirstStream().forEach(node -> {
             if (isZen1Node(node) == false) {
-                joinHelper.sendStartJoinRequest(startJoinRequest, node);
+                joinHelper.sendStartJoinRequest(startJoinRequest, node,"abdicateTo",getCurrentTerm());
             }
         });
         // handling of start join messages on the local node will be dispatched to the generic thread-pool
@@ -449,6 +448,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private Optional<Join> ensureTermAtLeast(DiscoveryNode sourceNode, long targetTerm) {
         assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+        //如果当前的term小于收到的term
         if (getCurrentTerm() < targetTerm) {
             return Optional.of(joinLeaderInTerm(new StartJoinRequest(sourceNode, targetTerm)));
         }

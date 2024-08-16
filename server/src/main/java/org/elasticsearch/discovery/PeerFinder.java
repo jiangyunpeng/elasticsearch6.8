@@ -253,7 +253,7 @@ public abstract class PeerFinder {
      */
     private boolean handleWakeUp() {
         assert holdsLock() : "PeerFinder mutex not held";
-        //SourceLogger.info(PeerFinder.class, "execute handleWakeUp()! peersByAddress=[{}]", peersByAddress);
+        SourceLogger.info(PeerFinder.class, "handleWakeUp start! peersByAddress=[{}]", peersByAddress.keySet());
 
         final boolean peersRemoved = peersByAddress.values().removeIf(Peer::handleWakeUp);
 
@@ -275,6 +275,7 @@ public abstract class PeerFinder {
             }
         });
 
+        SourceLogger.info(PeerFinder.class, "handleWakeUp end!");
         //提交延迟任务
         transportService.getThreadPool().scheduleUnlessShuttingDown(findPeersInterval, Names.GENERIC, new AbstractRunnable() {
             @Override
@@ -354,12 +355,12 @@ public abstract class PeerFinder {
 
             if (discoveryNode != null) {
                 if (transportService.nodeConnected(discoveryNode)) {
-                    SourceLogger.info(this.getClass(), "Peer.handleWakeUp() connected to {}", discoveryNode);
+                    //SourceLogger.info(this.getClass(), "Peer.handleWakeUp() connected to {}", discoveryNode);
                     if (peersRequestInFlight == false) {
                         requestPeers();
                     }
                 } else {
-                    SourceLogger.info(this.getClass(), "Peer.handleWakeUp() failed connected to {}", discoveryNode);
+                    //SourceLogger.info(this.getClass(), "Peer.handleWakeUp() failed connected to {}", discoveryNode);
                     logger.trace("{} no longer connected", this);
                     return true;
                 }
@@ -433,18 +434,19 @@ public abstract class PeerFinder {
                 @Override
                 public void handleResponse(PeersResponse response) {
                     //处理收到的peersResponse， C->S,C端
-                    logger.trace("{} received {}", Peer.this, response);
+                    //logger.trace("{} received {}", Peer.this, response);
+                    SourceLogger.info(Peer.class,"receive peer response:[{}] from [{}] ",response, discoveryNode);
+
                     synchronized (mutex) {
                         if (active == false) {
                             return;
                         }
-
                         peersRequestInFlight = false;
-                        //对peer响应中包含的地址进行探测
+                        //① 对peer响应中包含的地址进行探测
                         response.getMasterNode().map(DiscoveryNode::getAddress).ifPresent((e) -> startProbe(e, "peersResponse#master"));
                         response.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach((e) -> startProbe(e, "peersResponse#kownPeer"));
                     }
-
+                    //② 如果探测的节点刚好是leader直接发送Join
                     if (response.getMasterNode().equals(Optional.of(discoveryNode))) {
                         // Must not hold lock here to avoid deadlock
                         assert holdsLock() == false : "PeerFinder mutex is held in error";

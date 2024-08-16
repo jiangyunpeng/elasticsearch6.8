@@ -39,7 +39,6 @@ public class SourceLogger {
     private static List<String> balckClassList = new ArrayList<>();
     private static List<String> balckPkgList = new ArrayList<>();
 
-
     private static Filter BLACK_LOGGER_NAME = (logger, log) -> {
         if (logger == null) {
             return false;
@@ -57,18 +56,23 @@ public class SourceLogger {
         return false;
     };
 
-    private static List<Filter> filters = new ArrayList<>();
+    private static List<Filter> blackFilters = new ArrayList<>();
 
     static {
+        //选举
         balckClassList.add("FollowerChecker");
         balckClassList.add("FollowersChecker");
         balckClassList.add("VotingConfiguration");
         balckClassList.add("VoteCollection");
 
-        //balckPkgList.add("org.elasticsearch.cluster.coordination");
+        //shard
+        balckClassList.add("IndicesClusterStateService");
+
+        balckPkgList.add("org.elasticsearch.cluster.coordination");
+        balckPkgList.add("org.elasticsearch.discovery");
 
         try {
-            filters.add(BLACK_LOGGER_NAME);
+            blackFilters.add(BLACK_LOGGER_NAME);
 
             //init();
         } catch (Exception e) {
@@ -129,17 +133,22 @@ public class SourceLogger {
 
 
     private static void doWrite(Class logger, String log) {
-        for (Filter filter : filters) {
-            if (filter.filter(logger, log)) {
-                return;
-            }
+
+        if(logger.getSimpleName().equals("StoreRecovery") || logger.getSimpleName().equals("IndexShard")){
+            System.out.println(log);
         }
+
+//        for (Filter filter : blackFilters) {
+//            if (filter.filter(logger, log)) {
+//                return;
+//            }
+//        }
 //        logQueue.add(log);
 //
 //        if(System.getenv("ES_SOURCE_LOGGER")!=null){
 //            System.out.println(log);
 //        }
-        System.out.println(log);
+//        System.out.println(log);
     }
 
 

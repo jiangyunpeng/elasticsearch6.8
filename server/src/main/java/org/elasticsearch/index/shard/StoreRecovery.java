@@ -366,13 +366,14 @@ final class StoreRecovery {
         indexShard.prepareForIndexRecovery();
         SegmentInfos si = null;
         final Store store = indexShard.store();
-        SourceLogger.info(this.getClass(),"recoverFromStore shard:[{}]",indexShard.shardId);
+        long begin = System.currentTimeMillis();
+        SourceLogger.info(this.getClass(),"recoverFromStore begin shard:[{}]",indexShard.shardId);
         store.incRef();
         try {
             try {
                 store.failIfCorrupted();
                 try {
-                    //读取 last committed segments info
+                    //① 读取 last committed segments info
                     si = store.readLastCommittedSegmentsInfo();
                 } catch (Exception e) {
                     String files = "_unknown_";
@@ -434,6 +435,9 @@ final class StoreRecovery {
             throw new IndexShardRecoveryException(shardId, "failed to recover from gateway", e);
         } finally {
             store.decRef();
+            SourceLogger.info(this.getClass(),"recoverFromStore shard:[{}]end! cost:{}ms",
+                indexShard.shardId,
+                System.currentTimeMillis()-begin);
         }
     }
 
@@ -446,7 +450,7 @@ final class StoreRecovery {
     private void addRecoveredFileDetails(SegmentInfos si, Store store, RecoveryState.Index index) throws IOException {
         final Directory directory = store.directory();
         for (String name : Lucene.files(si)) {
-            SourceLogger.info(this.getClass(),"recover file {}",name);
+            //SourceLogger.info(this.getClass(),"recover file {}",name);
             long length = directory.fileLength(name);
             index.addFileDetail(name, length, true);
         }

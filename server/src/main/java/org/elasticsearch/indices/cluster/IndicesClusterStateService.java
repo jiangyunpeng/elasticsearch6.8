@@ -601,7 +601,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
 
     private void updateShard(DiscoveryNodes nodes, ShardRouting shardRouting, Shard shard, RoutingTable routingTable,
                              ClusterState clusterState) {
-        SourceLogger.info(this.getClass(),"update shard begin");
+        SourceLogger.info(this.getClass(),"update shard begin {}",shard.shardId());
 
         final ShardRouting currentRoutingEntry = shard.routingEntry();
         assert currentRoutingEntry.isSameAllocation(shardRouting) :

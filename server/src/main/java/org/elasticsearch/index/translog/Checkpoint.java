@@ -31,14 +31,14 @@ import java.nio.file.Path;
 
 final class Checkpoint {
 
-    final long offset;
-    final int numOps;
-    final long generation;
-    final long minSeqNo;
-    final long maxSeqNo;
-    final long globalCheckpoint;
-    final long minTranslogGeneration;
-    final long trimmedAboveSeqNo;
+    final long offset; //检查点信息在 translog 文件中的量， 允许读取translog位置的上限
+    final int numOps; //表示在这个 translog 文件中包含的操作数量
+    final long generation; //表示当前的 translog 代号（generation）。每次当 translog 被滚动（roll over）时,generation 数字会递增。不同的 generation 对应不同的 translog 文件
+    final long minSeqNo; //代表 translog 文件中包含的最小的序列号（sequence number）。序列号是用来标识操作顺序的唯一标识符
+    final long maxSeqNo; // 代表 translog 文件中包含的最大的序列号
+    final long globalCheckpoint; // 表示在集群中所有分片的操作都已经确认的最大的序列号。它用于确保每个分片的数据是一致的
+    final long minTranslogGeneration; //表示在分片中必须保留的最小 translog 代号。这个值用于判断哪些 translog 文件可以安全地删除
+    final long trimmedAboveSeqNo; //表示在恢复过程中，已经被修剪（trimmed）的最高序列号，所有高于这个序列号的操作都已经被丢弃
 
     private static final int VERSION_6_0_0 = 2; // introduction of global checkpoints
     private static final int CURRENT_VERSION = 3; // introduction of trimmed above seq#

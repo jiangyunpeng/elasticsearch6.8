@@ -79,7 +79,7 @@ public interface IndexingOperationListener {
         public Engine.Index preIndex(ShardId shardId, Engine.Index operation) {
             assert operation != null;
             for (IndexingOperationListener listener : listeners) {
-                try {
+                try {//分别执行 IndexingSlowLog、IndexingMemoryController、WatcherIndexingListener、InternalIndexingStats
                     listener.preIndex(shardId, operation);
                 } catch (Exception e) {
                     logger.warn(() -> new ParameterizedMessage("preIndex listener [{}] failed", listener), e);

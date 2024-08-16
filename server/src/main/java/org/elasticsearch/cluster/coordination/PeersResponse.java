@@ -70,7 +70,7 @@ public class PeersResponse extends TransportResponse {
     @Override
     public String toString() {
         return "PeersResponse{" +
-            "masterNode=" + masterNode +
+            "masterNode=" + (masterNode.isPresent()?masterNode.get():"null") +
             ", knownPeers=" + knownPeers +
             ", term=" + term +
             '}';
