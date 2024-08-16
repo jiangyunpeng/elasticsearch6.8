@@ -215,7 +215,7 @@ public class JoinHelper {
     }
 
     public void sendJoinRequest(DiscoveryNode destination, long term, Optional<Join> optionalJoin) {
-        SourceLogger.info(this.getClass(),"sendJoinRequest join={}",optionalJoin.get());
+        SourceLogger.info(this.getClass(),"sendJoinRequest join={}",optionalJoin.isPresent()?optionalJoin:"null");
         sendJoinRequest(destination, term, optionalJoin, () -> {
         });
     }
@@ -316,9 +316,16 @@ public class JoinHelper {
         }
     }
 
-    public void sendStartJoinRequest(final StartJoinRequest startJoinRequest, final DiscoveryNode destination) {
+    public void sendStartJoinRequest(final StartJoinRequest startJoinRequest, final DiscoveryNode destination,String reason,long term) {
+        SourceLogger.info(this.getClass(), "create StartJoin! send[{}] to {}, currentTerm:{}, reason:{}",
+            startJoinRequest,
+            destination,
+            term,
+            reason);
+
         assert startJoinRequest.getSourceNode().isMasterNode()
             : "sending start-join request for master-ineligible " + startJoinRequest.getSourceNode();
+
         transportService.sendRequest(destination, START_JOIN_ACTION_NAME, startJoinRequest, new TransportResponseHandler.Empty() {
                 @Override
                 public void handleResponse(TransportResponse.Empty response) {
