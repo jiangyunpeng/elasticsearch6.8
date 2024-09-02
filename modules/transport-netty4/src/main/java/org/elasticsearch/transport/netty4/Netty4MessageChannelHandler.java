@@ -190,6 +190,7 @@ final class Netty4MessageChannelHandler extends ChannelDuplexHandler {
         WriteOperation(ByteBuf buf, ChannelPromise promise) {
             this.buf = buf;
             this.promise = promise;
+            //SourceLogger.debug(this.getClass(), "new WriteOperation {}", buf);
         }
     }
 }

@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * This class generates sequences numbers and keeps track of the so-called "local checkpoint" which is the highest number for which all
  * previous sequence numbers have been processed (inclusive).
  */
-public class LocalCheckpointTracker {
+    public class LocalCheckpointTracker {
 
     /**
      * We keep a bit for each sequence number that is still pending. To optimize allocation, we do so in multiple sets allocating them on
@@ -85,6 +85,7 @@ public class LocalCheckpointTracker {
     }
 
     /**
+     * 原子自增seqNo，确保nextSeqNo是最大值
      * Marks the provided sequence number as seen and updates the max_seq_no if needed.
      */
     public void advanceMaxSeqNo(final long seqNo) {
@@ -181,14 +182,18 @@ public class LocalCheckpointTracker {
      */
     public boolean hasProcessed(final long seqNo) {
         assert seqNo >= 0 : "invalid seq_no=" + seqNo;
+        //①如果大于等于nextSeqNo，返回false
         if (seqNo >= nextSeqNo.get()) {
             return false;
         }
+        //②如果小于等于processedCheckpoint，返回true
         if (seqNo <= processedCheckpoint.get()) {
             return true;
         }
-        final long bitSetKey = getBitSetKey(seqNo);
-        final int bitSetOffset = seqNoToBitSetOffset(seqNo);
+
+        //③从map<bitset>中获取，每个bitset大小是1024
+        final long bitSetKey = getBitSetKey(seqNo);//除以1024
+        final int bitSetOffset = seqNoToBitSetOffset(seqNo);//余数
         synchronized (this) {
             // check again under lock
             if (seqNo <= processedCheckpoint.get()) {

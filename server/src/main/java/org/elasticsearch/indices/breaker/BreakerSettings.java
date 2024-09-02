@@ -59,7 +59,7 @@ public final class BreakerSettings {
 
     private final String name;
     private final long limitBytes;
-    private final double overhead;
+    private final double overhead;//通过乘以一个常量来放大计算出来的内存使用量，以确保系统有足够的缓冲空间,比如，如果 overhead 设置为 1.2，那么实际被记录的内存使用量将是估计值的 1.2 倍。
     private final CircuitBreaker.Type type;
     private final CircuitBreaker.Durability durability;
 
@@ -89,7 +89,7 @@ public final class BreakerSettings {
     public BreakerSettings(String name, long limitBytes, double overhead, CircuitBreaker.Type type, CircuitBreaker.Durability durability) {
         this.name = name;
         this.limitBytes = limitBytes;
-        this.overhead = overhead;
+        this.overhead = overhead; //通过乘以一个常量来放大计算出来的内存使用量，以确保系统有足够的缓冲空间,比如，如果 overhead 设置为 1.2，那么实际被记录的内存使用量将是估计值的 1.2 倍。
         this.type = type;
         this.durability = durability;
     }

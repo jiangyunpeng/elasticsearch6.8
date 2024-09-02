@@ -511,7 +511,7 @@ public class CoordinationState {
          * marked as committed.
          */
         default void markLastAcceptedStateAsCommitted() {
-            SourceLogger.info(this.getClass(),"markLastAcceptedStateAsCommitted");
+            //SourceLogger.info(this.getClass(),"markLastAcceptedStateAsCommitted");
             //返回最近接受的状态,也就是publish时设置的state
             final ClusterState lastAcceptedState = getLastAcceptedState();
             Metadata.Builder metadataBuilder = null;

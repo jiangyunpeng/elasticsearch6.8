@@ -203,7 +203,7 @@ public class Cache<K, V> {
             if (future != null) {
                 Entry<K, V> entry;
                 try {
-                    entry = future.get();
+                    entry = future.get();//获取Entry
                 } catch (ExecutionException e) {
                     assert future.isCompletedExceptionally();
                     segmentStats.miss();
@@ -211,7 +211,7 @@ public class Cache<K, V> {
                 } catch (InterruptedException e) {
                     throw new IllegalStateException(e);
                 }
-                if (isExpired.test(entry)) {
+                if (isExpired.test(entry)) {//是否过期
                     segmentStats.miss();
                     onExpiration.accept(entry);
                     return null;
@@ -239,6 +239,7 @@ public class Cache<K, V> {
             Entry<K, V> existing = null;
             try (ReleasableLock ignored = writeLock.acquire()) {
                 try {
+                    //直接写入并返回原来的entry
                     CompletableFuture<Entry<K, V>> future = map.put(key, CompletableFuture.completedFuture(entry));
                     if (future != null) {
                         existing = future.handle((ok, ex) -> {
@@ -253,7 +254,7 @@ public class Cache<K, V> {
                     throw new IllegalStateException(e);
                 }
             }
-            return Tuple.tuple(entry, existing);
+            return Tuple.tuple(entry, existing);//保存新老两个版本的Entry
         }
 
         /**
@@ -464,9 +465,11 @@ public class Cache<K, V> {
 
     private void put(K key, V value, long now) {
         CacheSegment<K, V> segment = getCacheSegment(key);
+        //写入会返回新老两个版本
         Tuple<Entry<K, V>, Entry<K, V>> tuple = segment.put(key, value, now);
         boolean replaced = false;
         try (ReleasableLock ignored = lruLock.acquire()) {
+            //如果老版本存在
             if (tuple.v2() != null && tuple.v2().state == State.EXISTING) {
                 if (unlink(tuple.v2())) {
                     replaced = true;

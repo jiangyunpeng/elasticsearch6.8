@@ -33,6 +33,10 @@ import static java.util.Collections.unmodifiableSet;
 import static java.util.stream.Collectors.toSet;
 
 /**
+ * 用于检查集群是否存在全局级别的阻塞。
+ * 常用方法：ClusterState.blocks().globalBlockedException()
+ * 检查集群状态是否设置了全局的写操作或读操作的阻塞，如果存在这样的阻塞，它会返回一个对应的异常，通常是 ClusterBlockException，表明当前操作被全局阻塞
+ *
  * Represents current cluster level blocks to block dirty operations done against the cluster.
  */
 public class ClusterBlocks extends AbstractDiffable<ClusterBlocks> {

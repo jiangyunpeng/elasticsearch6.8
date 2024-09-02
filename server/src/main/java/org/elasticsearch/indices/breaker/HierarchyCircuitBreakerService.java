@@ -113,6 +113,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
                                    Function<Boolean, OverLimitStrategy> overLimitStrategyFactory) {
         super();
         HashMap<String, CircuitBreaker> childCircuitBreakers = new HashMap<>();
+        //fielddata 上限堆内存的的40%
         childCircuitBreakers.put(CircuitBreaker.FIELDDATA, validateAndCreateBreaker(
             new BreakerSettings(CircuitBreaker.FIELDDATA,
                 FIELDDATA_CIRCUIT_BREAKER_LIMIT_SETTING.get(settings).getBytes(),
@@ -120,6 +121,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
                 FIELDDATA_CIRCUIT_BREAKER_TYPE_SETTING.get(settings),
                 CircuitBreaker.Durability.PERMANENT
         )));
+        //in_flight_requests 上限堆内存的100%
         childCircuitBreakers.put(CircuitBreaker.IN_FLIGHT_REQUESTS, validateAndCreateBreaker(
             new BreakerSettings(CircuitBreaker.IN_FLIGHT_REQUESTS,
                 IN_FLIGHT_REQUESTS_CIRCUIT_BREAKER_LIMIT_SETTING.get(settings).getBytes(),
@@ -127,6 +129,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
                 IN_FLIGHT_REQUESTS_CIRCUIT_BREAKER_TYPE_SETTING.get(settings),
                 CircuitBreaker.Durability.TRANSIENT
         )));
+        //request 上限堆内存的的60%
         childCircuitBreakers.put(CircuitBreaker.REQUEST, validateAndCreateBreaker(
             new BreakerSettings(CircuitBreaker.REQUEST,
                 REQUEST_CIRCUIT_BREAKER_LIMIT_SETTING.get(settings).getBytes(),
@@ -134,6 +137,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
                 REQUEST_CIRCUIT_BREAKER_TYPE_SETTING.get(settings),
                 CircuitBreaker.Durability.TRANSIENT
         )));
+        //accounting 上限堆内存的的100%
         childCircuitBreakers.put(CircuitBreaker.ACCOUNTING, validateAndCreateBreaker(new BreakerSettings(CircuitBreaker.ACCOUNTING,
                 ACCOUNTING_CIRCUIT_BREAKER_LIMIT_SETTING.get(settings).getBytes(),
                 ACCOUNTING_CIRCUIT_BREAKER_OVERHEAD_SETTING.get(settings),
@@ -149,10 +153,12 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
             childCircuitBreakers.put(breakerSettings.getName(), validateAndCreateBreaker(breakerSettings));
         }
         this.breakers = Collections.unmodifiableMap(childCircuitBreakers);
+        //parent 上限堆内存的的95%
         this.parentSettings = new BreakerSettings(CircuitBreaker.PARENT,
                 TOTAL_CIRCUIT_BREAKER_LIMIT_SETTING.get(settings).getBytes(), 1.0,
                 CircuitBreaker.Type.PARENT, null);
-        logger.trace(() -> new ParameterizedMessage("parent circuit breaker with settings {}", this.parentSettings));
+
+        logger.info(() -> new ParameterizedMessage("parent circuit breaker with settings {}", this.parentSettings));
 
         this.trackRealMemoryUsage = USE_REAL_MEMORY_USAGE_SETTING.get(settings);
 
@@ -265,6 +271,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
                 permanentUsage += breakerUsed;
             }
         }
+        //默认为true, 实时获取HeapMemoryUsage
         if (this.trackRealMemoryUsage) {
             final long current = currentMemoryUsage();
             return new MemoryUsage(current, current + newBytesReserved, transientUsage, permanentUsage);
@@ -300,8 +307,9 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
      * Checks whether the parent breaker has been tripped
      */
     public void checkParentLimit(long newBytesReserved, String label) throws CircuitBreakingException {
-        final MemoryUsage memoryUsed = memoryUsed(newBytesReserved);
-        long parentLimit = this.parentSettings.getLimit();
+        final MemoryUsage memoryUsed = memoryUsed(newBytesReserved);//对内存大小
+        long parentLimit = this.parentSettings.getLimit(); //堆内存上限95%
+        //判断内存是否超过parent的上限，并且
         if (memoryUsed.totalUsage > parentLimit && overLimitStrategy.overLimit(memoryUsed).totalUsage > parentLimit) {
             this.parentTripCount.incrementAndGet();
             final StringBuilder message = new StringBuilder("[parent] Data too large, data for [" + label + "]" +

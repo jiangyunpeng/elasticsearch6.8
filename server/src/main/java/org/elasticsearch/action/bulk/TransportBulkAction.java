@@ -43,6 +43,7 @@ import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.unit.TimeValue;
@@ -158,7 +159,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         final Releasable releasable = indexingPressure.markCoordinatingOperationStarted(indexingBytes, isOnlySystem);
         final ActionListener<BulkResponse> releasingListener = ActionListener.runBefore(listener, releasable::close);
         final String executorName = isOnlySystem ? Names.SYSTEM_WRITE : Names.WRITE;
-        try {
+        try {//内部实现
             doInternalExecute(task, bulkRequest, executorName, releasingListener);
         } catch (Exception e) {
             releasingListener.onFailure(e);
@@ -169,7 +170,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         final long startTime = relativeTime();
         final AtomicArray<BulkItemResponse> responses = new AtomicArray<>(bulkRequest.requests.size());
 
-        boolean hasIndexRequestsWithPipelines = false;
+        boolean hasIndexRequestsWithPipelines = false;//index是否有pipeline
         final Metadata metadata = clusterService.state().getMetadata();
         final Version minNodeVersion = clusterService.state().getNodes().getMinNodeVersion();
         for (DocWriteRequest<?> actionRequest : bulkRequest.requests) {
@@ -189,7 +190,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             }
         }
 
-        if (hasIndexRequestsWithPipelines) {
+        if (hasIndexRequestsWithPipelines) {//如果对应有pipeline
             // this method (doExecute) will be called again, but with the bulk requests updated from the ingest node processing but
             // also with IngestService.NOOP_PIPELINE_NAME on each request. This ensures that this on the second time through this method,
             // this path is never taken.
@@ -202,7 +203,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                         .allMatch(IndexRequest::isPipelineResolved);
                     assert arePipelinesResolved : bulkRequest;
                 }
-                if (clusterService.localNode().isIngestNode()) {
+                if (clusterService.localNode().isIngestNode()) {//如果当前是Ingest节点
                     processBulkIndexIngestRequest(task, bulkRequest, executorName, listener);
                 } else {
                     ingestForwarder.forwardIngestRequest(BulkAction.INSTANCE, bulkRequest, listener);
@@ -431,7 +432,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 if (addFailureIfIndexIsUnavailable(docWriteRequest, i, concreteIndices, metadata)) {
                     continue;
                 }
-                Index concreteIndex = concreteIndices.resolveIfAbsent(docWriteRequest);
+                Index concreteIndex = concreteIndices.resolveIfAbsent(docWriteRequest);//解析索引别名为Index
                 try {
                     // The ConcreteIndices#resolveIfAbsent(...) method validates via IndexNameExpressionResolver whether
                     // an operation is allowed in index into a data stream, but this isn't done when resolve call is cached, so
@@ -454,8 +455,8 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                             final IndexMetadata indexMetadata = metadata.index(concreteIndex);
                             MappingMetadata mappingMd = indexMetadata.mappingOrDefault();
                             Version indexCreated = indexMetadata.getCreationVersion();
-                            indexRequest.resolveRouting(metadata);
-                            indexRequest.process(indexCreated, mappingMd, concreteIndex.getName());
+                            indexRequest.resolveRouting(metadata);//解析参数中的routing
+                            indexRequest.process(indexCreated, mappingMd, concreteIndex.getName());//如果id为空，自动产生id
                             break;
                         case UPDATE:
                             TransportUpdateAction.resolveAndValidateRouting(metadata, concreteIndex.getName(),
@@ -481,6 +482,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             }
 
             // first, go over all the requests and create a ShardId -> Operations mapping
+            //② 按照shardId将request分组
             Map<ShardId, List<BulkItemRequest>> requestsByShard = new HashMap<>();
             for (int i = 0; i < bulkRequest.requests.size(); i++) {
                 DocWriteRequest<?> request = bulkRequest.requests.get(i);
@@ -489,7 +491,8 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 }
                 String concreteIndex = concreteIndices.getConcreteIndex(request.index()).getName();
                 ShardId shardId = clusterService.operationRouting().indexShards(clusterState, concreteIndex, request.id(),
-                    request.routing()).shardId();
+                    request.routing()).shardId();//根据requestId进行路由
+                SourceLogger.info(this.getClass(),"routing reqId {} to shard {}",request.id(),shardId);
                 List<BulkItemRequest> shardRequests = requestsByShard.computeIfAbsent(shardId, shard -> new ArrayList<>());
                 shardRequests.add(new BulkItemRequest(i, request));
             }
@@ -500,19 +503,23 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 return;
             }
 
-            final AtomicInteger counter = new AtomicInteger(requestsByShard.size());
+            final AtomicInteger counter = new AtomicInteger(requestsByShard.size());//分片的数量
             String nodeId = clusterService.localNode().getId();
+            //③ 按照shard分组执行shardBulkAction.execute()
             for (Map.Entry<ShardId, List<BulkItemRequest>> entry : requestsByShard.entrySet()) {
                 final ShardId shardId = entry.getKey();
                 final List<BulkItemRequest> requests = entry.getValue();
+
+                //按照shardId创建BulkShardRequest
                 BulkShardRequest bulkShardRequest = new BulkShardRequest(shardId, bulkRequest.getRefreshPolicy(),
                         requests.toArray(new BulkItemRequest[requests.size()]));
                 bulkShardRequest.waitForActiveShards(bulkRequest.waitForActiveShards());
-                bulkShardRequest.timeout(bulkRequest.timeout());
+                bulkShardRequest.timeout(bulkRequest.timeout());//设置超时时间，默认1分钟
                 bulkShardRequest.routedBasedOnClusterVersion(clusterState.version());
                 if (task != null) {
                     bulkShardRequest.setParentTask(nodeId, task.getId());
                 }
+                SourceLogger.info(this.getClass(),"send bulkShardRequest to {}",shardId);
                 shardBulkAction.execute(bulkShardRequest, new ActionListener<BulkShardResponse>() {
                     @Override
                     public void onResponse(BulkShardResponse bulkShardResponse) {

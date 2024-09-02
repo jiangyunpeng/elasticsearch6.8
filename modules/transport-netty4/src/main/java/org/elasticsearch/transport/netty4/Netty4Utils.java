@@ -15,6 +15,7 @@ import io.netty.util.NettyRuntime;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefIterator;
 import org.elasticsearch.common.Booleans;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 
@@ -82,6 +83,7 @@ public class Netty4Utils {
             if (buffers.size() == 1) {
                 return buffers.get(0);
             } else {
+                //SourceLogger.debug(Netty4Utils.class,"create CompositeByteBuf buffers size {}",buffers.size());
                 CompositeByteBuf composite = Unpooled.compositeBuffer(buffers.size());
                 composite.addComponents(true, buffers);
                 return composite;

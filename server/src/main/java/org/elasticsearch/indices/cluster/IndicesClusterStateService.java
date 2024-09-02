@@ -454,22 +454,26 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
     }
 
     private void createIndices(final ClusterState state) {
-        // we only create indices for shards that are allocated
+
+        //①从RoutingNodes中获取本地的RoutingNode
         RoutingNode localRoutingNode = state.getRoutingNodes().node(state.nodes().getLocalNodeId());
         if (localRoutingNode == null) {
             return;
         }
+
         // create map of indices to create with shards to fail if index creation fails
+        //②从localRoutingNode中解析出需要创建的IndexService
         final Map<Index, List<ShardRouting>> indicesToCreate = new HashMap<>();
         for (ShardRouting shardRouting : localRoutingNode) {
             if (failedShardsCache.containsKey(shardRouting.shardId()) == false) {
                 final Index index = shardRouting.index();
-                if (indicesService.indexService(index) == null) {
+                if (indicesService.indexService(index) == null) {//如果分片所属的index在本地不存在
                     indicesToCreate.computeIfAbsent(index, k -> new ArrayList<>()).add(shardRouting);
                 }
             }
         }
 
+        //③调用IndicesService创建IndexService
         for (Map.Entry<Index, List<ShardRouting>> entry : indicesToCreate.entrySet()) {
             final Index index = entry.getKey();
             final IndexMetadata indexMetadata = state.metadata().index(index);

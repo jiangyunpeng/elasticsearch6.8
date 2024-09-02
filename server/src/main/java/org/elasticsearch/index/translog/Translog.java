@@ -159,7 +159,8 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
         this.location = config.getTranslogPath();
         Files.createDirectories(this.location);
 
-        try {//① 从translog中读取检查点，文件是translog.ckp
+        try {
+            //① 从translog中读取检查点，文件是translog.ckp
             final Checkpoint checkpoint = readCheckpoint(location);
             final Path nextTranslogFile = location.resolve(getFilename(checkpoint.generation + 1));
             final Path currentCheckpointFile = location.resolve(getCommitCheckpointFileName(checkpoint.generation));
@@ -179,6 +180,8 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
                 logger.warn("deleted previously created, but not yet committed, next generation [{}]. This can happen due to a" +
                     " tragic exception when creating a new generation", nextTranslogFile.getFileName());
             }
+
+
             this.readers.addAll(recoverFromFiles(checkpoint));
             if (readers.isEmpty()) {
                 throw new IllegalStateException("at least one reader must be recovered");
@@ -213,21 +216,40 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
         ArrayList<TranslogReader> foundTranslogs = new ArrayList<>();
         try (ReleasableLock ignored = writeLock.acquire()) {
             logger.debug("open uncommitted translog checkpoint {}", checkpoint);
+
+            //最小的 translog 代
             final long minGenerationToRecoverFrom = checkpoint.minTranslogGeneration;
+
+            SourceLogger.info(this.getClass(),"init translog! recover from generation [{}] to [{}] checkpoint:[{}]",
+                minGenerationToRecoverFrom,
+                checkpoint.generation,
+                checkpoint);
 
             // we open files in reverse order in order to validate the translog uuid before we start traversing the translog based on
             // the generation id we found in the lucene commit. This gives for better error messages if the wrong
             // translog was found.
+            //按照generation读取对应的tlog文件，从大到小
             for (long i = checkpoint.generation; i >= minGenerationToRecoverFrom; i--) {
+
+                //按照generation读取对应的tlog文件
                 Path committedTranslogFile = location.resolve(getFilename(i));
+
+                //如果不存在报错
                 if (Files.exists(committedTranslogFile) == false) {
                     throw new TranslogCorruptedException(committedTranslogFile.toString(),
                         "translog file doesn't exist with generation: " + i + " recovering from: " + minGenerationToRecoverFrom
                             + " checkpoint: " + checkpoint.generation + " - translog ids must be consecutive");
                 }
+
                 final Checkpoint readerCheckpoint = i == checkpoint.generation ? checkpoint
                     : Checkpoint.read(location.resolve(getCommitCheckpointFileName(i)));
+
+                //初始化TranslogReader，对应了readerCheckpoint
                 final TranslogReader reader = openReader(committedTranslogFile, readerCheckpoint);
+                SourceLogger.info(this.getClass(),"init translog! create TranslogReader maxSeqNo:{} from [{}]",
+                    readerCheckpoint.maxSeqNo,
+                    committedTranslogFile);
+
                 assert reader.getPrimaryTerm() <= primaryTermSupplier.getAsLong() :
                     "Primary terms go backwards; current term [" + primaryTermSupplier.getAsLong() + "] translog path [ "
                         + committedTranslogFile + ", existing term [" + reader.getPrimaryTerm() + "]";
@@ -615,7 +637,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
                 .filter(reader -> reader.getCheckpoint().minSeqNo <= toSeqNo && fromSeqNo <= reader.getCheckpoint().maxEffectiveSeqNo())
                 .map(BaseTranslogReader::newSnapshot).toArray(TranslogSnapshot[]::new);
 
-            SourceLogger.info(this.getClass(), "create TranslogSnapshot:[{}] fromSeqNo:[{}] to toSeqNo:[{}] by translog",
+            SourceLogger.info(this.getClass(), "new Snapshot size:[{}] fromSeqNo:[{}] by translog",
                 snapshots.length,
                 fromSeqNo,
                 toSeqNo);
@@ -712,6 +734,8 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
      */
     public void sync() throws IOException {
         try (ReleasableLock lock = readLock.acquire()) {
+//            SourceLogger.info(this.getClass(),"execute sync");
+
             if (closed.get() == false) {
                 current.sync();
             }
@@ -1636,6 +1660,8 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
      * @throws IOException if an I/O exception occurred during any file operations
      */
     public void rollGeneration() throws IOException {
+        //SourceLogger.info(this.getClass(),"rollGeneration");
+
         syncBeforeRollGeneration();
         if (current.totalOperations() == 0 && primaryTermSupplier.getAsLong() == current.getPrimaryTerm()) {
             return;
@@ -1696,7 +1722,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
                 iterator.remove();
                 IOUtils.closeWhileHandlingException(reader);
                 final Path translogPath = reader.path();
-                SourceLogger.info(this.getClass(), "delete translog file [{}], not referenced and not current anymore", translogPath);
+                //SourceLogger.info(this.getClass(), "delete translog file [{}], not referenced and not current anymore", translogPath);
                 // The checkpoint is used when opening the translog to know which files should be recovered from.
                 // We now update the checkpoint to ignore the file we are going to remove.
                 // Note that there is a provision in recoverFromFiles to allow for the case where we synced the checkpoint
@@ -1816,7 +1842,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
         final Checkpoint checkpoint = readCheckpoint(location);
         // We need to open at least one translog header to validate the translogUUID.
         final Path translogFile = location.resolve(getFilename(checkpoint.generation));
-        SourceLogger.info(Translog.class, "read translog and Checkpoint path={},checkpoint={}", translogFile, checkpoint);
+        //SourceLogger.info(Translog.class, "read translog and Checkpoint path={},checkpoint={}", translogFile, checkpoint);
         try (FileChannel channel = FileChannel.open(translogFile, StandardOpenOption.READ)) {
             TranslogHeader.read(expectedTranslogUUID, translogFile, channel);
         } catch (TranslogCorruptedException ex) {

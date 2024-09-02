@@ -66,7 +66,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public class TransportService extends AbstractLifecycleComponent
-        implements ReportingService<TransportInfo>, TransportMessageListener, TransportConnectionListener {
+    implements ReportingService<TransportInfo>, TransportMessageListener, TransportConnectionListener {
 
     private static final Logger logger = LogManager.getLogger(TransportService.class);
 
@@ -81,7 +81,7 @@ public class TransportService extends AbstractLifecycleComponent
             PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS = true;
         } else {
             throw new IllegalArgumentException("invalid value [" + value + "] for system property ["
-                    + PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS_KEY + "]");
+                + PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS_KEY + "]");
         }
     }
 
@@ -112,7 +112,8 @@ public class TransportService extends AbstractLifecycleComponent
             }
         });
 
-    public static final TransportInterceptor NOOP_TRANSPORT_INTERCEPTOR = new TransportInterceptor() {};
+    public static final TransportInterceptor NOOP_TRANSPORT_INTERCEPTOR = new TransportInterceptor() {
+    };
 
     // tracer log
 
@@ -126,7 +127,9 @@ public class TransportService extends AbstractLifecycleComponent
     private final boolean validateConnections;
     private final boolean requireCompatibleBuild;
 
-    /** if set will call requests sent to this id to shortcut and executed locally */
+    /**
+     * if set will call requests sent to this id to shortcut and executed locally
+     */
     volatile DiscoveryNode localNode = null;
     private final Transport.Connection localNodeConnection = new Transport.Connection() {
         @Override
@@ -158,7 +161,7 @@ public class TransportService extends AbstractLifecycleComponent
      * Build the service.
      *
      * @param clusterSettings if non null, the {@linkplain TransportService} will register with the {@link ClusterSettings} for settings
- *   *    updates for {@link TransportSettings#TRACE_LOG_EXCLUDE_SETTING} and {@link TransportSettings#TRACE_LOG_INCLUDE_SETTING}.
+     *                        *    updates for {@link TransportSettings#TRACE_LOG_EXCLUDE_SETTING} and {@link TransportSettings#TRACE_LOG_INCLUDE_SETTING}.
      */
     public TransportService(Settings settings, Transport transport, ThreadPool threadPool, TransportInterceptor transportInterceptor,
                             Function<BoundTransportAddress, DiscoveryNode> localNodeFactory, @Nullable ClusterSettings clusterSettings,
@@ -212,7 +215,7 @@ public class TransportService extends AbstractLifecycleComponent
 
         if (PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS) {
             logger.warn("transport handshakes from incompatible builds are unsafely permitted on this node; remove system property [" +
-                    PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS_KEY + "] to resolve this warning");
+                PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS_KEY + "] to resolve this warning");
             DeprecationLogger.getLogger(TransportService.class).deprecate("permit_handshake_from_incompatible_builds",
                 "system property [" + PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS_KEY + "] is deprecated and should be removed");
         }
@@ -296,6 +299,7 @@ public class TransportService extends AbstractLifecycleComponent
                                 holderToNotify.action()),
                             e);
                     }
+
                     @Override
                     public void onFailure(Exception e) {
                         logger.warn(
@@ -304,6 +308,7 @@ public class TransportService extends AbstractLifecycleComponent
                                 holderToNotify.action()),
                             e);
                     }
+
                     @Override
                     public void doRun() {
                         TransportException ex = new SendRequestTransportException(holderToNotify.connection().getNode(),
@@ -373,7 +378,7 @@ public class TransportService extends AbstractLifecycleComponent
     /**
      * Connect to the specified node with the given connection profile
      *
-     * @param node the node to connect to
+     * @param node              the node to connect to
      * @param connectionProfile the connection profile to use when connecting to this node
      */
     public void connectToNode(final DiscoveryNode node, ConnectionProfile connectionProfile) {
@@ -384,7 +389,7 @@ public class TransportService extends AbstractLifecycleComponent
      * Connect to the specified node with the given connection profile.
      * The ActionListener will be called on the calling thread or the generic thread pool.
      *
-     * @param node the node to connect to
+     * @param node     the node to connect to
      * @param listener the action listener to notify
      */
     public void connectToNode(DiscoveryNode node, ActionListener<Void> listener) throws ConnectTransportException {
@@ -395,9 +400,9 @@ public class TransportService extends AbstractLifecycleComponent
      * Connect to the specified node with the given connection profile.
      * The ActionListener will be called on the calling thread or the generic thread pool.
      *
-     * @param node the node to connect to
+     * @param node              the node to connect to
      * @param connectionProfile the connection profile to use when connecting to this node
-     * @param listener the action listener to notify
+     * @param listener          the action listener to notify
      */
     public void connectToNode(final DiscoveryNode node, ConnectionProfile connectionProfile, ActionListener<Void> listener) {
         if (isLocalNode(node)) {
@@ -424,7 +429,8 @@ public class TransportService extends AbstractLifecycleComponent
      * Establishes and returns a new connection to the given node. The connection is NOT maintained by this service, it's the callers
      * responsibility to close the connection once it goes out of scope.
      * The ActionListener will be called on the calling thread or the generic thread pool.
-     * @param node the node to connect to
+     *
+     * @param node              the node to connect to
      * @param connectionProfile the connection profile to use
      */
     public Transport.Connection openConnection(final DiscoveryNode node, ConnectionProfile connectionProfile) {
@@ -435,9 +441,10 @@ public class TransportService extends AbstractLifecycleComponent
      * Establishes a new connection to the given node. The connection is NOT maintained by this service, it's the callers
      * responsibility to close the connection once it goes out of scope.
      * The ActionListener will be called on the calling thread or the generic thread pool.
-     * @param node the node to connect to
+     *
+     * @param node              the node to connect to
      * @param connectionProfile the connection profile to use
-     * @param listener the action listener to notify
+     * @param listener          the action listener to notify
      */
     public void openConnection(final DiscoveryNode node, ConnectionProfile connectionProfile,
                                ActionListener<Transport.Connection> listener) {
@@ -459,7 +466,7 @@ public class TransportService extends AbstractLifecycleComponent
      * @param handshakeTimeout handshake timeout
      * @param listener         action listener to notify
      * @throws ConnectTransportException if the connection failed
-     * @throws IllegalStateException if the handshake failed
+     * @throws IllegalStateException     if the handshake failed
      */
     public void handshake(
         final Transport.Connection connection,
@@ -475,10 +482,10 @@ public class TransportService extends AbstractLifecycleComponent
      * name on the target node doesn't match the local cluster name.
      * The ActionListener will be called on the calling thread or the generic thread pool.
      *
-     * @param connection       the connection to a specific node
-     * @param handshakeTimeout handshake timeout
+     * @param connection           the connection to a specific node
+     * @param handshakeTimeout     handshake timeout
      * @param clusterNamePredicate cluster name validation predicate
-     * @param listener         action listener to notify
+     * @param listener             action listener to notify
      * @throws IllegalStateException if the handshake failed
      */
     public void handshake(
@@ -564,8 +571,8 @@ public class TransportService extends AbstractLifecycleComponent
                 } catch (Exception e) {
                     if (isIncompatibleBuild(version, buildHash, requireCompatibleBuild)) {
                         throw new IllegalArgumentException("unidentifiable remote node is build [" + buildHash +
-                                "] of version [" + version + "] but this node is build [" + Build.CURRENT.hash() +
-                                "] of version [" + Version.CURRENT + "] which has an incompatible wire format", e);
+                            "] of version [" + version + "] but this node is build [" + Build.CURRENT.hash() +
+                            "] of version [" + Version.CURRENT + "] which has an incompatible wire format", e);
                     } else {
                         throw e;
                     }
@@ -574,13 +581,13 @@ public class TransportService extends AbstractLifecycleComponent
                 if (isIncompatibleBuild(version, buildHash, requireCompatibleBuild)) {
                     if (PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS) {
                         logger.warn("remote node [{}] is build [{}] of version [{}] but this node is build [{}] of version [{}] " +
-                                        "which may not be compatible; remove system property [{}] to resolve this warning",
-                                discoveryNode, buildHash, version, Build.CURRENT.hash(), Version.CURRENT,
-                                PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS_KEY);
+                                "which may not be compatible; remove system property [{}] to resolve this warning",
+                            discoveryNode, buildHash, version, Build.CURRENT.hash(), Version.CURRENT,
+                            PERMIT_HANDSHAKES_FROM_INCOMPATIBLE_BUILDS_KEY);
                     } else {
                         throw new IllegalArgumentException("remote node [" + discoveryNode + "] is build [" + buildHash +
-                                "] of version [" + version + "] but this node is build [" + Build.CURRENT.hash() +
-                                "] of version [" + Version.CURRENT + "] which has an incompatible wire format");
+                            "] of version [" + version + "] but this node is build [" + Build.CURRENT.hash() +
+                            "] of version [" + Version.CURRENT + "] which has an incompatible wire format");
                     }
                 }
 
@@ -673,8 +680,8 @@ public class TransportService extends AbstractLifecycleComponent
     }
 
     public <T extends TransportResponse> void sendRequest(final DiscoveryNode node, final String action,
-                                                                final TransportRequest request,
-                                                                final TransportResponseHandler<T> handler) {
+                                                          final TransportRequest request,
+                                                          final TransportResponseHandler<T> handler) {
         sendRequest(node, action, request, TransportRequestOptions.EMPTY, handler);
     }
 
@@ -683,6 +690,10 @@ public class TransportService extends AbstractLifecycleComponent
                                                                 final TransportRequestOptions options,
                                                                 TransportResponseHandler<T> handler) {
         final Transport.Connection connection;
+//        if (!action.contains("coordination")) {
+//            SourceLogger.info(this.getClass(), "sendRequest {}", action);
+//        }
+
         try {
             connection = getConnection(node);
         } catch (final NodeNotConnectedException ex) {
@@ -779,6 +790,7 @@ public class TransportService extends AbstractLifecycleComponent
 
     /**
      * Returns either a real transport connection or a local node connection if we are using the local node optimization.
+     *
      * @throws NodeNotConnectedException if the given node is not connected
      */
     public Transport.Connection getConnection(DiscoveryNode node) {
@@ -875,6 +887,7 @@ public class TransportService extends AbstractLifecycleComponent
                                 contextToNotify.action()),
                             e);
                     }
+
                     @Override
                     public void onFailure(Exception e) {
                         logger.warn(
@@ -883,6 +896,7 @@ public class TransportService extends AbstractLifecycleComponent
                                 contextToNotify.action()),
                             e);
                     }
+
                     @Override
                     protected void doRun() throws Exception {
                         contextToNotify.handler().handleException(sendRequestException);
@@ -930,7 +944,7 @@ public class TransportService extends AbstractLifecycleComponent
                         } catch (Exception inner) {
                             inner.addSuppressed(e);
                             logger.warn(() -> new ParameterizedMessage(
-                                    "failed to notify channel of error message for action [{}]", action), inner);
+                                "failed to notify channel of error message for action [{}]", action), inner);
                         }
                     }
 
@@ -986,14 +1000,14 @@ public class TransportService extends AbstractLifecycleComponent
         "cluster:monitor",
         "cluster:internal",
         "internal:"
-        )));
+    )));
 
     private void validateActionName(String actionName) {
         // TODO we should makes this a hard validation and throw an exception but we need a good way to add backwards layer
         // for it. Maybe start with a deprecation layer
         if (isValidActionName(actionName) == false) {
             logger.warn("invalid action name [" + actionName + "] must start with one of: " +
-                TransportService.VALID_ACTION_PREFIXES );
+                TransportService.VALID_ACTION_PREFIXES);
         }
     }
 
@@ -1014,10 +1028,10 @@ public class TransportService extends AbstractLifecycleComponent
     /**
      * Registers a new request handler
      *
-     * @param action         The action the request handler is associated with
-     * @param requestReader  a callable to be used construct new instances for streaming
-     * @param executor       The executor the request handling will be executed on
-     * @param handler        The handler itself that implements the request handling
+     * @param action        The action the request handler is associated with
+     * @param requestReader a callable to be used construct new instances for streaming
+     * @param executor      The executor the request handling will be executed on
+     * @param handler       The handler itself that implements the request handling
      */
     public <Request extends TransportRequest> void registerRequestHandler(String action, String executor,
                                                                           Writeable.Reader<Request> requestReader,
@@ -1033,7 +1047,7 @@ public class TransportService extends AbstractLifecycleComponent
      * Registers a new request handler
      *
      * @param action                The action the request handler is associated with
-     * @param requestReader               The request class that will be used to construct new instances for streaming
+     * @param requestReader         The request class that will be used to construct new instances for streaming
      * @param executor              The executor the request handling will be executed on
      * @param forceExecution        Force execution on the executor queue and never reject it
      * @param canTripCircuitBreaker Check the request size and raise an exception in case the limit is breached.
@@ -1066,7 +1080,9 @@ public class TransportService extends AbstractLifecycleComponent
         messageListener.onRequestReceived(requestId, action);
     }
 
-    /** called by the {@link Transport} implementation once a request has been sent */
+    /**
+     * called by the {@link Transport} implementation once a request has been sent
+     */
     @Override
     public void onRequestSent(DiscoveryNode node, long requestId, String action, TransportRequest request,
                               TransportRequestOptions options) {
@@ -1086,7 +1102,9 @@ public class TransportService extends AbstractLifecycleComponent
         messageListener.onResponseReceived(requestId, holder);
     }
 
-    /** called by the {@link Transport} implementation once a response was sent to calling node */
+    /**
+     * called by the {@link Transport} implementation once a response was sent to calling node
+     */
     @Override
     public void onResponseSent(long requestId, String action, TransportResponse response) {
         if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
@@ -1095,7 +1113,9 @@ public class TransportService extends AbstractLifecycleComponent
         messageListener.onResponseSent(requestId, action, response);
     }
 
-    /** called by the {@link Transport} implementation after an exception was sent as a response to an incoming request */
+    /**
+     * called by the {@link Transport} implementation after an exception was sent as a response to an incoming request
+     */
     @Override
     public void onResponseSent(long requestId, String action, Exception e) {
         if (tracerLog.isTraceEnabled() && shouldTraceAction(action)) {
@@ -1277,7 +1297,7 @@ public class TransportService extends AbstractLifecycleComponent
 
         @Override
         public void handleResponse(T response) {
-            if(handler != null) {
+            if (handler != null) {
                 handler.cancel();
             }
             try (ThreadContext.StoredContext ignore = contextSupplier.get()) {
@@ -1287,7 +1307,7 @@ public class TransportService extends AbstractLifecycleComponent
 
         @Override
         public void handleException(TransportException exp) {
-            if(handler != null) {
+            if (handler != null) {
                 handler.cancel();
             }
             try (ThreadContext.StoredContext ignore = contextSupplier.get()) {

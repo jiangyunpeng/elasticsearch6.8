@@ -10,7 +10,7 @@ package org.elasticsearch.common.collect;
 
 public class Tuple<V1, V2> {
 
-    public static <V1, V2> Tuple<V1, V2> tuple(V1 v1, V2 v2) {
+    public static <V1, V2> Tuple<V1, V2> tuple(V1 v1, V2 v2) {//保存新老两个版本
         return new Tuple<>(v1, v2);
     }
 

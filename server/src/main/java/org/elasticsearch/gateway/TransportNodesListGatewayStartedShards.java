@@ -106,7 +106,7 @@ public class TransportNodesListGatewayStartedShards extends
     protected NodeGatewayStartedShards nodeOperation(NodeRequest request) {
         try {
             final ShardId shardId = request.getShardId();
-            SourceLogger.info(this.getClass(),"{} loading local shard state info", shardId);
+            SourceLogger.info(this.getClass(),"{} loading local shard state info from {}", shardId,nodeEnv.availableShardPaths(request.shardId));
             ShardStateMetadata shardStateMetadata = ShardStateMetadata.FORMAT.loadLatestState(logger, namedXContentRegistry,
                 nodeEnv.availableShardPaths(request.shardId));
             if (shardStateMetadata != null) {

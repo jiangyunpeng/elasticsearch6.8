@@ -538,7 +538,7 @@ public class IndicesService extends AbstractLifecycleComponent
     public synchronized IndexService createIndex(
             final IndexMetadata indexMetadata, final List<IndexEventListener> builtInListeners,
             final boolean writeDanglingIndices) throws IOException {
-        SourceLogger.info(this.getClass(),"createIndex {}",indexMetadata.getIndex());
+        SourceLogger.info(this.getClass(),"create IndexService {}",indexMetadata.getIndex());
         ensureChangesAllowed();
         if (indexMetadata.getIndexUUID().equals(IndexMetadata.INDEX_UUID_NA_VALUE)) {
             throw new IllegalArgumentException("index must have a real UUID found value: [" + indexMetadata.getIndexUUID() + "]");
@@ -647,11 +647,11 @@ public class IndicesService extends AbstractLifecycleComponent
         }
         // we ignore private settings since they are not registered settings
         indexScopedSettings.validate(indexMetadata.getSettings(), true, true, true);
-        SourceLogger.info(this.getClass(),"creating Index [{}], shards [{}]/[{}] - reason [{}]",
-            indexMetadata.getIndex(),
-            idxSettings.getNumberOfShards(),
-            idxSettings.getNumberOfReplicas(),
-            indexCreationContext);
+//        SourceLogger.info(this.getClass(),"creating IndexService [{}], shards [{}]/[{}] - reason [{}]",
+//            indexMetadata.getIndex(),
+//            idxSettings.getNumberOfShards(),
+//            idxSettings.getNumberOfReplicas(),
+//            indexCreationContext);
 
         final IndexModule indexModule = new IndexModule(idxSettings, analysisRegistry, getEngineFactory(idxSettings),
             directoryFactories, () -> allowExpensiveQueries, indexNameExpressionResolver, recoveryStateFactories);
@@ -770,14 +770,18 @@ public class IndicesService extends AbstractLifecycleComponent
             final RetentionLeaseSyncer retentionLeaseSyncer,
             final DiscoveryNode targetNode,
             final DiscoveryNode sourceNode) throws IOException {
-        SourceLogger.info(this.getClass(),"createShard");
+
         Objects.requireNonNull(retentionLeaseSyncer);
         ensureChangesAllowed();
+
+        //① 找到对应的IndexService
         IndexService indexService = indexService(shardRouting.index());
         assert indexService != null;
         RecoveryState recoveryState = indexService.createRecoveryState(shardRouting, targetNode, sourceNode);
+        //② 通过 indexService 创建IndexShard
         IndexShard indexShard = indexService.createShard(shardRouting, globalCheckpointSyncer, retentionLeaseSyncer);
         indexShard.addShardFailureCallback(onShardFailure);
+        //③ 开始恢复
         indexShard.startRecovery(recoveryState, recoveryTargetService, recoveryListener, repositoriesService,
             (type, mapping) -> {
                 assert recoveryState.getRecoverySource().getType() == RecoverySource.Type.LOCAL_SHARDS:

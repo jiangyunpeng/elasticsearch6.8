@@ -110,6 +110,8 @@ public interface CircuitBreaker {
     long getLimit();
 
     /**
+     * overhead 参数的作用是通过乘以一个常量来放大计算出来的内存使用量，以确保系统有足够的缓冲空间
+     * 比如，如果 overhead 设置为 1.2，那么实际被记录的内存使用量将是估计值的 1.2 倍。
      * @return overhead of circuit breaker
      */
     double getOverhead();

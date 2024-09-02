@@ -17,6 +17,7 @@ import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.elasticsearch.node.Node.NODE_NAME_SETTING;
@@ -31,6 +32,27 @@ public class RetryableActionTests extends ESTestCase {
         super.setUp();
         Settings settings = Settings.builder().put(NODE_NAME_SETTING.getKey(), "node").build();
         taskQueue = new DeterministicTaskQueue(settings, random());
+    }
+
+    public void test101() throws ExecutionException, InterruptedException {
+        final PlainActionFuture<Boolean> future = PlainActionFuture.newFuture();
+        final RetryableAction<Boolean> retryableAction = new RetryableAction<Boolean>(logger, taskQueue.getThreadPool(),
+            TimeValue.timeValueMillis(10), TimeValue.timeValueSeconds(30), future) {
+
+            @Override
+            public void tryAction(ActionListener<Boolean> listener) {
+                System.out.println("try execute");
+                listener.onResponse(false);
+
+            }
+
+            @Override
+            public boolean shouldRetry(Exception e) {
+                return true;
+            }
+        };
+        retryableAction.run();
+        System.out.println("result:"+ future.get());
     }
 
     public void testRetryableActionNoRetries() {

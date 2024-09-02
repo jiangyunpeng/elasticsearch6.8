@@ -18,6 +18,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ThreadedActionListener;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.Booleans;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -252,6 +253,10 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
         @Override
         public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)
             throws IOException, TransportException {
+//            if (!action.contains("coordination")) {
+//                SourceLogger.info(this.getClass(), "sendRequest {}", action);
+//            }
+
             if (isClosing.get()) {
                 throw new NodeNotConnectedException(node, "connection already closed");
             }
@@ -698,10 +703,10 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
      *
      * @param networkBytes the will be read
      * @return the length of the message
-     * @throws StreamCorruptedException              if the message header format is not recognized
-     * @throws HttpRequestOnTransportException       if the message header appears to be an HTTP message
-     * @throws IllegalArgumentException              if the message length is greater that the maximum allowed frame size.
-     *                                               This is dependent on the available memory.
+     * @throws StreamCorruptedException        if the message header format is not recognized
+     * @throws HttpRequestOnTransportException if the message header appears to be an HTTP message
+     * @throws IllegalArgumentException        if the message length is greater that the maximum allowed frame size.
+     *                                         This is dependent on the available memory.
      */
     public static int readMessageLength(BytesReference networkBytes) throws IOException {
         if (networkBytes.length() < BYTES_NEEDED_FOR_MESSAGE_SIZE) {
@@ -719,14 +724,14 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
 
             if (appearsToBeHTTPResponse(headerBuffer)) {
                 throw new StreamCorruptedException("received HTTP response on transport port, ensure that transport port (not " +
-                        "HTTP port) of a remote node is specified in the configuration");
+                    "HTTP port) of a remote node is specified in the configuration");
             }
 
             String firstBytes = "("
-                    + Integer.toHexString(headerBuffer.get(0) & 0xFF) + ","
-                    + Integer.toHexString(headerBuffer.get(1) & 0xFF) + ","
-                    + Integer.toHexString(headerBuffer.get(2) & 0xFF) + ","
-                    + Integer.toHexString(headerBuffer.get(3) & 0xFF) + ")";
+                + Integer.toHexString(headerBuffer.get(0) & 0xFF) + ","
+                + Integer.toHexString(headerBuffer.get(1) & 0xFF) + ","
+                + Integer.toHexString(headerBuffer.get(2) & 0xFF) + ","
+                + Integer.toHexString(headerBuffer.get(3) & 0xFF) + ")";
 
             if (appearsToBeTLS(headerBuffer)) {
                 throw new StreamCorruptedException("SSL/TLS request received but SSL/TLS is not enabled on this node, got " + firstBytes);
@@ -747,7 +752,7 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
 
         if (messageLength > THIRTY_PER_HEAP_SIZE) {
             throw new IllegalArgumentException("illegal transport message of size [" + new ByteSizeValue(messageLength) +
-                    "] which exceeds 30% of this node's heap size [" + new ByteSizeValue(THIRTY_PER_HEAP_SIZE) + "], closing connection");
+                "] which exceeds 30% of this node's heap size [" + new ByteSizeValue(THIRTY_PER_HEAP_SIZE) + "], closing connection");
         }
 
         return messageLength;
@@ -843,7 +848,7 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
         final long messagesReceived = statsTracker.getMessagesReceived();
         final long bytesRead = statsTracker.getBytesRead();
         return new TransportStats(acceptedChannels.size(), outboundConnectionCount.get(),
-                messagesReceived, bytesRead, messagesSent, bytesWritten);
+            messagesReceived, bytesRead, messagesSent, bytesWritten);
     }
 
     /**

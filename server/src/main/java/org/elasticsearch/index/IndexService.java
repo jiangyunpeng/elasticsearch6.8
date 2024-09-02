@@ -26,6 +26,7 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedFunction;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
@@ -482,6 +483,10 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             eventListener.afterIndexShardCreated(indexShard);
             shards = newMapBuilder(shards).put(shardId.id(), indexShard).immutableMap();
             success = true;
+            SourceLogger.info(this.getClass(),"create IndexShard {} primaryTerm:{}",
+                indexShard.shardId(),
+                indexShard.getPendingPrimaryTerm());
+
             return indexShard;
         } catch (ShardLockObtainFailedException e) {
             throw new IOException("failed to obtain in-memory shard lock", e);

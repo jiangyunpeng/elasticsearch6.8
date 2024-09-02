@@ -20,6 +20,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,7 +31,8 @@ public class SourceLogger {
     private static final String SPLIT = " ";
     private static final String SPLIT1 = " - ";
     private static final String TAB = "  ";
-    private static final BlockingQueue<String> logQueue = new LinkedBlockingDeque<>();
+    private static final int LOG_QUEUE_SIZE = 5000;
+    private static final BlockingQueue<String> logQueue = new ArrayBlockingQueue<>(LOG_QUEUE_SIZE);
     private static final AtomicLong seq = new AtomicLong();
     private static final ThreadLocal<Context> localContext = new ThreadLocal<>();
     private static File logFile;
@@ -67,14 +69,14 @@ public class SourceLogger {
 
         //shard
         balckClassList.add("IndicesClusterStateService");
+        balckClassList.add("ClusterApplierService");
 
         balckPkgList.add("org.elasticsearch.cluster.coordination");
         balckPkgList.add("org.elasticsearch.discovery");
 
         try {
             blackFilters.add(BLACK_LOGGER_NAME);
-
-            //init();
+            init();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -88,7 +90,7 @@ public class SourceLogger {
     private static void init() throws FileNotFoundException {
         File logDir = new File(System.getProperty("user.dir"), "logs");
         logDir.mkdirs();
-        logFile = new File(logDir, "kafka.log");
+        logFile = new File(logDir, "es_source.log");
         System.out.println("logFile path: " + logFile);
 
         writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile)));
@@ -101,7 +103,7 @@ public class SourceLogger {
                 }
             }
         });
-        t.setName("sourceLogger-write-thread");
+        t.setName("SourceLogger-Write-Thread");
         t.setDaemon(true);
         t.start();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -134,9 +136,9 @@ public class SourceLogger {
 
     private static void doWrite(Class logger, String log) {
 
-        if(logger.getSimpleName().equals("StoreRecovery") || logger.getSimpleName().equals("IndexShard")){
-            System.out.println(log);
-        }
+//        if(logger.getSimpleName().equals("StoreRecovery") || logger.getSimpleName().equals("IndexShard")){
+//            System.out.println(log);
+//        }
 
 //        for (Filter filter : blackFilters) {
 //            if (filter.filter(logger, log)) {
@@ -144,13 +146,17 @@ public class SourceLogger {
 //            }
 //        }
 //        logQueue.add(log);
-//
-//        if(System.getenv("ES_SOURCE_LOGGER")!=null){
-//            System.out.println(log);
-//        }
+
 //        System.out.println(log);
     }
 
+    public synchronized static void debug(Class type, String message, Object... args) {
+        String log = format(type, message, args);
+        if (logQueue.size() < LOG_QUEUE_SIZE) {
+            logQueue.add(log);
+        }
+//        System.out.println(log);
+    }
 
     public synchronized static void info(Class type, String message, Object... args) {
         doWrite(type, format(type, message, args));

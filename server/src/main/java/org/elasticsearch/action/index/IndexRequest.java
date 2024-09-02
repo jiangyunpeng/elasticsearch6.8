@@ -22,6 +22,7 @@ import org.elasticsearch.client.Requests;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -682,6 +683,7 @@ public class IndexRequest extends ReplicatedWriteRequest<IndexRequest> implement
             } else {
                 uid = UUIDs.legacyBase64UUID();
             }
+            SourceLogger.info(this.getClass(),"generate id {} for {}",uid,concreteIndex);
             id(uid);
         }
     }

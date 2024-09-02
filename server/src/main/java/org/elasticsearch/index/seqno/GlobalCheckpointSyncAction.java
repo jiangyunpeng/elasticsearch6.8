@@ -18,6 +18,7 @@ import org.elasticsearch.action.support.replication.ReplicationResponse;
 import org.elasticsearch.action.support.replication.TransportReplicationAction;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.settings.Settings;
@@ -68,6 +69,7 @@ public class GlobalCheckpointSyncAction extends TransportReplicationAction<
     }
 
     public void updateGlobalCheckpointForShard(final ShardId shardId) {
+
         final ThreadContext threadContext = threadPool.getThreadContext();
         try (ThreadContext.StoredContext ignore = threadContext.stashContext()) {
             threadContext.markAsSystemContext();
@@ -91,6 +93,7 @@ public class GlobalCheckpointSyncAction extends TransportReplicationAction<
     protected void shardOperationOnPrimary(Request request, IndexShard indexShard,
                                            ActionListener<PrimaryResult<Request, ReplicationResponse>> listener) {
         ActionListener.completeWith(listener, () -> {
+            //SourceLogger.info(GlobalCheckpointSyncAction.class,"execute maybeSyncTranslog on Primary");
             maybeSyncTranslog(indexShard);
             return new PrimaryResult<>(request, new ReplicationResponse());
         });
@@ -99,6 +102,7 @@ public class GlobalCheckpointSyncAction extends TransportReplicationAction<
     @Override
     protected void shardOperationOnReplica(Request shardRequest, IndexShard replica, ActionListener<ReplicaResult> listener) {
         ActionListener.completeWith(listener, () -> {
+            SourceLogger.info(GlobalCheckpointSyncAction.class,"execute maybeSyncTranslog on Replica");
             maybeSyncTranslog(replica);
             return new ReplicaResult();
         });

@@ -66,8 +66,9 @@ public class CopyBytesSocketChannel extends Netty4NioSocketChannel {
 
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
-        int writeSpinCount = config().getWriteSpinCount();
+        int writeSpinCount = config().getWriteSpinCount();//默认是16
         do {
+            //如果 OutboundBuffer 中等待flush的buffer为空则退出
             if (in.isEmpty()) {
                 // All written so clear OP_WRITE
                 clearOpWrite();
@@ -76,21 +77,22 @@ public class CopyBytesSocketChannel extends Netty4NioSocketChannel {
             }
 
             // Ensure the pending writes are made of ByteBufs only.
-            int maxBytesPerGatheringWrite = writeConfig.getMaxBytesPerGatheringWrite();
-            ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);
+            int maxBytesPerGatheringWrite = writeConfig.getMaxBytesPerGatheringWrite(); //256k~2mb
+            ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);//从OutboundBuffer中获取数据
             int nioBufferCnt = in.nioBufferCount();
 
+            //如果ByteBuffer数量为0
             if (nioBufferCnt == 0) {// We have something else beside ByteBuffers to write so fallback to normal writes.
                 writeSpinCount -= doWrite0(in);
             } else {
                 // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
                 // to check if the total size of all the buffers is non-zero.
-                ByteBuffer ioBuffer = getIoBuffer();
-                copyBytes(nioBuffers, nioBufferCnt, ioBuffer);
+                ByteBuffer ioBuffer = getIoBuffer(); //获取线程内的ByteBuffer
+                copyBytes(nioBuffers, nioBufferCnt, ioBuffer);//copy到ioBuffer
                 ioBuffer.flip();
 
                 int attemptedBytes = ioBuffer.remaining();
-                final int localWrittenBytes = writeToSocketChannel(javaChannel(), ioBuffer);
+                final int localWrittenBytes = writeToSocketChannel(javaChannel(), ioBuffer);//写入到channel
                 if (localWrittenBytes <= 0) {
                     incompleteWrite(true);
                     return;
@@ -149,10 +151,17 @@ public class CopyBytesSocketChannel extends Netty4NioSocketChannel {
         }
     }
 
+    /**
+     * 从用户写入的原始数据写入到DirectByteBuf
+     *
+     * @param source
+     * @param nioBufferCnt
+     * @param destination
+     */
     private static void copyBytes(ByteBuffer[] source, int nioBufferCnt, ByteBuffer destination) {
         for (int i = 0; i < nioBufferCnt && destination.hasRemaining(); i++) {
             ByteBuffer buffer = source[i];
-            int nBytesToCopy = Math.min(destination.remaining(), buffer.remaining());
+            int nBytesToCopy = Math.min(destination.remaining(), buffer.remaining()); //确保destination不会越界
             if (buffer.hasArray()) {
                 destination.put(buffer.array(), buffer.arrayOffset() + buffer.position(), nBytesToCopy);
             } else {

@@ -27,7 +27,7 @@ import static org.elasticsearch.index.translog.Translog.getCommitCheckpointFileN
 /**
  * an immutable translog filereader
  */
-public class TranslogReader extends BaseTranslogReader implements Closeable {
+    public class TranslogReader extends BaseTranslogReader implements Closeable {
     protected final long length;
     private final int totalOperations;
     private final Checkpoint checkpoint;

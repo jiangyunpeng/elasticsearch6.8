@@ -211,7 +211,7 @@ final class IndexShardOperationPermits implements Closeable {
         final Releasable releasable;
         try {
             synchronized (this) {
-                if (queuedBlockOperations > 0) {
+                if (queuedBlockOperations > 0) {//排队的操作数
                     final Supplier<StoredContext> contextSupplier = threadPool.getThreadContext().newRestorableContext(false);
                     final ActionListener<Releasable> wrappedListener;
                     if (executorOnDelay != null) {
@@ -249,7 +249,7 @@ final class IndexShardOperationPermits implements Closeable {
         // execute this outside the synchronized block!
         onAcquired.onResponse(releasable);
     }
-
+    //通过semaphore获取一许可，返回一个Releasable可以返回许可
     private Releasable acquire(Object debugInfo, StackTraceElement[] stackTrace) throws InterruptedException {
         assert Thread.holdsLock(this);
         if (semaphore.tryAcquire(1, 0, TimeUnit.SECONDS)) { // the un-timed tryAcquire methods do not honor the fairness setting

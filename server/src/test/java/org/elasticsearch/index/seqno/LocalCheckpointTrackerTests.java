@@ -35,6 +35,7 @@ public class LocalCheckpointTrackerTests extends ESTestCase {
     private LocalCheckpointTracker tracker;
 
     public static LocalCheckpointTracker createEmptyTracker() {
+        //seqId和localCheckpoint都为-1
         return new LocalCheckpointTracker(SequenceNumbers.NO_OPS_PERFORMED, SequenceNumbers.NO_OPS_PERFORMED);
     }
 
@@ -50,20 +51,21 @@ public class LocalCheckpointTrackerTests extends ESTestCase {
         assertThat(tracker.getProcessedCheckpoint(), equalTo(SequenceNumbers.NO_OPS_PERFORMED));
         seqNo1 = tracker.generateSeqNo();
         assertThat(seqNo1, equalTo(0L));
-        tracker.markSeqNoAsProcessed(seqNo1);
+
+        tracker.markSeqNoAsProcessed(seqNo1);//0
         assertThat(tracker.getProcessedCheckpoint(), equalTo(0L));
         assertThat(tracker.hasProcessed(0L), equalTo(true));
         assertThat(tracker.hasProcessed(atLeast(1)), equalTo(false));
-        seqNo1 = tracker.generateSeqNo();
-        seqNo2 = tracker.generateSeqNo();
+        seqNo1 = tracker.generateSeqNo();//1
+        seqNo2 = tracker.generateSeqNo();//2
         assertThat(seqNo1, equalTo(1L));
         assertThat(seqNo2, equalTo(2L));
-        tracker.markSeqNoAsProcessed(seqNo2);
-        assertThat(tracker.getProcessedCheckpoint(), equalTo(0L));
+        tracker.markSeqNoAsProcessed(seqNo2);//标记2先处理
+        assertThat(tracker.getProcessedCheckpoint(), equalTo(0L)); //Checkpoint还是0，因为1还没有标记处理成功
         assertThat(tracker.hasProcessed(seqNo1), equalTo(false));
         assertThat(tracker.hasProcessed(seqNo2), equalTo(true));
-        tracker.markSeqNoAsProcessed(seqNo1);
-        assertThat(tracker.getProcessedCheckpoint(), equalTo(2L));
+        tracker.markSeqNoAsProcessed(seqNo1); //1处理成功
+        assertThat(tracker.getProcessedCheckpoint(), equalTo(2L));//pck为2
         assertThat(tracker.hasProcessed(between(0, 2)), equalTo(true));
         assertThat(tracker.hasProcessed(atLeast(3)), equalTo(false));
         assertThat(tracker.getPersistedCheckpoint(), equalTo(SequenceNumbers.NO_OPS_PERFORMED));

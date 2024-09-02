@@ -35,6 +35,7 @@ import org.elasticsearch.cluster.routing.AllocationId;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -150,12 +151,14 @@ public abstract class TransportReplicationAction<
         this.retryTimeout = REPLICATION_RETRY_TIMEOUT.get(settings);
         this.forceExecutionOnPrimary = forceExecutionOnPrimary;
 
+        //注册 actionName
         transportService.registerRequestHandler(actionName, ThreadPool.Names.SAME, requestReader, this::handleOperationRequest);
-
+        //transportPrimaryAction
         transportService.registerRequestHandler(transportPrimaryAction, executor, forceExecutionOnPrimary, true,
             in -> new ConcreteShardRequest<>(requestReader, in), this::handlePrimaryRequest);
 
         // we must never reject on because of thread pool capacity on replicas
+        //注册transportReplicaAction
         transportService.registerRequestHandler(transportReplicaAction, executor, true, true,
             in -> new ConcreteReplicaRequest<>(replicaRequestReader, in), this::handleReplicaRequest);
 
@@ -325,15 +328,17 @@ public abstract class TransportReplicationAction<
                 throw new ReplicationOperation.RetryOnPrimaryException(shardId, "actual shard is not a primary " + shardRouting);
             }
             final String actualAllocationId = shardRouting.allocationId().getId();
-            if (actualAllocationId.equals(primaryRequest.getTargetAllocationID()) == false) {
+            if (actualAllocationId.equals(primaryRequest.getTargetAllocationID()) == false) {//检查发起请求时的allocationId和现在是否一致
                 throw new ShardNotFoundException(shardId, "expected allocation id [{}] but found [{}]",
                     primaryRequest.getTargetAllocationID(), actualAllocationId);
             }
             final long actualTerm = indexShard.getPendingPrimaryTerm();
-            if (actualTerm != primaryRequest.getPrimaryTerm()) {
+            if (actualTerm != primaryRequest.getPrimaryTerm()) {//检测term是否一致
                 throw new ShardNotFoundException(shardId, "expected allocation id [{}] with term [{}] but found [{}]",
                     primaryRequest.getTargetAllocationID(), primaryRequest.getPrimaryTerm(), actualTerm);
             }
+
+            SourceLogger.info(AsyncPrimaryAction.class,"acquirePrimaryOperationPermit {} ",shardId);
 
             acquirePrimaryOperationPermit(
                     indexShard,
@@ -360,7 +365,7 @@ public abstract class TransportReplicationAction<
                     throw blockException;
                 }
 
-                if (primaryShardReference.isRelocated()) {
+                if (primaryShardReference.isRelocated()) {//如果主分片被重分配到其他节点，转发到relocatingNodeId
                     primaryShardReference.close(); // release shard operation lock as soon as possible
                     setPhase(replicationTask, "primary_delegation");
                     // delegate primary phase to relocation target
@@ -388,6 +393,7 @@ public abstract class TransportReplicationAction<
                         });
                 } else {
                     setPhase(replicationTask, "primary");
+                    SourceLogger.info(AsyncPrimaryAction.class,"Success acquirePrimaryOperationPermit {} ",primaryShardReference.indexShard.shardId());
 
                     final ActionListener<Response> responseListener = ActionListener.wrap(response -> {
                         adaptResponse(response, primaryShardReference.indexShard);
@@ -408,7 +414,7 @@ public abstract class TransportReplicationAction<
                             }
                         }
 
-                        primaryShardReference.close(); // release shard operation lock before responding to caller
+                        primaryShardReference.close(); // 在发送响应之前先释放锁
                         setPhase(replicationTask, "finished");
                         onCompletionListener.onResponse(response);
                     }, e -> handleException(primaryShardReference, e));
@@ -510,6 +516,8 @@ public abstract class TransportReplicationAction<
 
     protected void handleReplicaRequest(final ConcreteReplicaRequest<ReplicaRequest> replicaRequest, final TransportChannel channel,
                                         final Task task) {
+        //SourceLogger.info(this.getClass(),"handleReplicaRequest {} ",replicaRequest.getRequest().shardId());
+
         Releasable releasable = checkReplicaLimits(replicaRequest.getRequest());
         ActionListener<ReplicaResponse> listener =
             ActionListener.runBefore(new ChannelActionListener<>(channel, transportReplicaAction, replicaRequest), releasable::close);
@@ -563,18 +571,18 @@ public abstract class TransportReplicationAction<
         public void onResponse(Releasable releasable) {
             assert replica.getActiveOperationsCount() != 0 : "must perform shard operation under a permit";
             try {
+                SourceLogger.info(AsyncReplicaAction.class,"副本操作成功获取到锁");
+                //调用TransportWriteAction.shardOperationOnReplica()
+
                 shardOperationOnReplica(replicaRequest.getRequest(), replica, ActionListener.wrap((replicaResult) ->
                     replicaResult.runPostReplicaActions(
                         ActionListener.wrap(r -> {
+                            //这里已经执行成功
                             final ReplicaResponse response =
                                 new ReplicaResponse(replica.getLocalCheckpoint(), replica.getLastSyncedGlobalCheckpoint());
-                            releasable.close(); // release shard operation lock before responding to caller
-                            if (logger.isTraceEnabled()) {
-                                logger.trace("action [{}] completed on shard [{}] for request [{}]", transportReplicaAction,
-                                    replicaRequest.getRequest().shardId(),
-                                    replicaRequest.getRequest());
-                            }
+                            releasable.close(); // 释放锁
                             setPhase(task, "finished");
+                            //返回结果
                             onCompletionListener.onResponse(response);
                         }, e -> {
                             Releasables.closeWhileHandlingException(releasable); // release shard operation lock before responding to caller
@@ -639,6 +647,7 @@ public abstract class TransportReplicationAction<
                 throw new ShardNotFoundException(this.replica.shardId(), "expected allocation id [{}] but found [{}]",
                     replicaRequest.getTargetAllocationID(), actualAllocationId);
             }
+
             acquireReplicaOperationPermit(replica, replicaRequest.getRequest(), this, replicaRequest.getPrimaryTerm(),
                 replicaRequest.getGlobalCheckpoint(), replicaRequest.getMaxSeqNoOfUpdatesOrDeletes());
         }
@@ -688,6 +697,7 @@ public abstract class TransportReplicationAction<
         protected void doRun() {
             setPhase(task, "routing");
             final ClusterState state = observer.setAndGetObservedState();
+            //①检查集群是否处于全局阻塞状态
             final ClusterBlockException blockException = blockExceptions(state, request.shardId().getIndexName());
             if (blockException != null) {
                 if (blockException.retryable()) {
@@ -698,7 +708,7 @@ public abstract class TransportReplicationAction<
                 }
             } else {
                 final IndexMetadata indexMetadata = state.metadata().index(request.shardId().getIndex());
-                if (indexMetadata == null) {
+                if (indexMetadata == null) {//检查indexMetadata是否存在
                     // ensure that the cluster state on the node is at least as high as the node that decided that the index was there
                     if (state.version() < request.routedBasedOnClusterVersion()) {
                         logger.trace("failed to find index [{}] for request [{}] despite sender thinking it would be here. " +
@@ -728,19 +738,22 @@ public abstract class TransportReplicationAction<
                     "request waitForActiveShards must be set in resolveRequest";
 
                 final ShardRouting primary = state.getRoutingTable().shardRoutingTable(request.shardId()).primaryShard();
-                if (primary == null || primary.active() == false) {
+                if (primary == null || primary.active() == false) {//检查主分片是否可用
                     logger.trace("primary shard [{}] is not yet active, scheduling a retry: action [{}], request [{}], "
                         + "cluster state version [{}]", request.shardId(), actionName, request, state.version());
                     retryBecauseUnavailable(request.shardId(), "primary shard is not active");
                     return;
                 }
-                if (state.nodes().nodeExists(primary.currentNodeId()) == false) {
+                if (state.nodes().nodeExists(primary.currentNodeId()) == false) {//检查主分片对应的节点是否存在
                     logger.trace("primary shard [{}] is assigned to an unknown node [{}], scheduling a retry: action [{}], request [{}], "
                         + "cluster state version [{}]", request.shardId(), primary.currentNodeId(), actionName, request, state.version());
                     retryBecauseUnavailable(request.shardId(), "primary shard isn't assigned to a known node.");
                     return;
                 }
+                //获取主分片所在node，如果是本地执行performLocalAction，否则执行performRemoteAction
                 final DiscoveryNode node = state.nodes().get(primary.currentNodeId());
+                SourceLogger.info(this.getClass(),"reroute {} to {}",primary.shardId(),node);
+
                 if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                     performLocalAction(state, primary, node, indexMetadata);
                 } else {
@@ -784,6 +797,7 @@ public abstract class TransportReplicationAction<
 
         private void performAction(final DiscoveryNode node, final String action, final boolean isPrimaryAction,
                                    final TransportRequest requestToPerform) {
+
             transportService.sendRequest(node, action, requestToPerform, transportOptions, new TransportResponseHandler<Response>() {
 
                 @Override
@@ -916,7 +930,7 @@ public abstract class TransportReplicationAction<
 
         PrimaryShardReference(IndexShard indexShard, Releasable operationLock) {
             this.indexShard = indexShard;
-            this.operationLock = operationLock;
+            this.operationLock = operationLock;//从IndexShardOperationPermits.acquire()中获取的lock
         }
 
         @Override
@@ -1074,6 +1088,7 @@ public abstract class TransportReplicationAction<
                 request, replica.allocationId().getId(), primaryTerm, globalCheckpoint, maxSeqNoOfUpdatesOrDeletes);
             final ActionListenerResponseHandler<ReplicaResponse> handler = new ActionListenerResponseHandler<>(listener,
                 ReplicaResponse::new);
+            //发送Action indices:data/write/bulk[s][r] 对应的是 handleReplicaRequest()
             transportService.sendRequest(node, transportReplicaAction, replicaRequest, transportOptions, handler);
         }
 

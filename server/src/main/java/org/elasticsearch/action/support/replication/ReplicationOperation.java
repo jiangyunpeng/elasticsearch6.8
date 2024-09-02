@@ -22,6 +22,7 @@ import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.SourceLogger;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.unit.TimeValue;
@@ -108,6 +109,8 @@ public class ReplicationOperation<
 
         totalShards.incrementAndGet();
         pendingActions.incrementAndGet(); // increase by 1 until we finish all primary coordination
+        // 注册回调 handlePrimaryResult()，这里会发送bulk到副本
+        // 调用 PrimaryShardReference.perform()
         primary.perform(request, ActionListener.wrap(this::handlePrimaryResult, this::finishAsFailed));
     }
 
@@ -134,6 +137,7 @@ public class ReplicationOperation<
             final ReplicationGroup replicationGroup = primary.getReplicationGroup();
             final PendingReplicationActions pendingReplicationActions = primary.getPendingReplicationActions();
             markUnavailableShardsAsStale(replicaRequest, replicationGroup);
+            SourceLogger.info(this.getClass(),"========= begin performOnReplicas");
             performOnReplicas(replicaRequest, globalCheckpoint, maxSeqNoOfUpdatesOrDeletes, replicationGroup, pendingReplicationActions);
         }
         primaryResult.runPostReplicationActions(new ActionListener<Void>() {
@@ -225,11 +229,15 @@ public class ReplicationOperation<
         };
 
         final String allocationId = shard.allocationId().getId();
+
+        //调用replicasProxy.performOn() 封装成了一个可以重试的Action
         final RetryableAction<ReplicaResponse> replicationAction = new RetryableAction<ReplicaResponse>(logger, threadPool,
             initialRetryBackoffBound, retryTimeout, replicationListener) {
 
             @Override
             public void tryAction(ActionListener<ReplicaResponse> listener) {
+                SourceLogger.info(ReplicationOperation.class,"try performOnReplica {} for request",
+                    shard.shardId());
                 replicasProxy.performOn(shard, replicaRequest, primaryTerm, globalCheckpoint, maxSeqNoOfUpdatesOrDeletes, listener);
             }
 
