@@ -136,18 +136,16 @@ public class SourceLogger {
 
     private static void doWrite(Class logger, String log) {
 
-//        if(logger.getSimpleName().equals("StoreRecovery") || logger.getSimpleName().equals("IndexShard")){
-//            System.out.println(log);
-//        }
+        for (Filter filter : blackFilters) {
+            if (filter.filter(logger, log)) {
+                return;
+            }
+        }
 
-//        for (Filter filter : blackFilters) {
-//            if (filter.filter(logger, log)) {
-//                return;
-//            }
-//        }
 //        logQueue.add(log);
 
 //        System.out.println(log);
+
     }
 
     public synchronized static void debug(Class type, String message, Object... args) {
@@ -155,7 +153,7 @@ public class SourceLogger {
         if (logQueue.size() < LOG_QUEUE_SIZE) {
             logQueue.add(log);
         }
-//        System.out.println(log);
+        System.out.println(log);
     }
 
     public synchronized static void info(Class type, String message, Object... args) {

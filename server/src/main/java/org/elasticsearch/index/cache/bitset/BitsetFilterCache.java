@@ -139,7 +139,7 @@ public final class BitsetFilterCache extends AbstractIndexComponent
             cacheHelper.addClosedListener(BitsetFilterCache.this);
             return CacheBuilder.<Query, Value>builder().build();
         });
-        SourceLogger.debug(BitsetFilterCache.class, "add bitset cache {} for {}", shardId, query);
+        //SourceLogger.debug(BitsetFilterCache.class, "add bitset cache {} for {}", shardId, query);
         return filterToFbs.computeIfAbsent(query, key -> {
             final BitSet bitSet = bitsetFromQuery(query, context);
             Value value = new Value(bitSet, shardId);

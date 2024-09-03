@@ -452,27 +452,32 @@ public class AllocationService {
         allocation.routingNodes().unassigned().sort(PriorityComparator.getAllocationComparator(allocation)); // sort for priority ordering
         SourceLogger.info(AllocationService.class, "allocateExistingUnassignedShards begin !");
 
+        // 分配前置处理
         for (final ExistingShardsAllocator existingShardsAllocator : existingShardsAllocators.values()) {
             existingShardsAllocator.beforeAllocation(allocation);
         }
-
+        //主分片
         final RoutingNodes.UnassignedShards.UnassignedIterator primaryIterator = allocation.routingNodes().unassigned().iterator();
         while (primaryIterator.hasNext()) {
             final ShardRouting shardRouting = primaryIterator.next();
-            if (shardRouting.primary()) {//主分片GatewayAllocator
-                getAllocatorForShard(shardRouting, allocation).allocateUnassigned(shardRouting, allocation, primaryIterator);
+            if (shardRouting.primary()) {
+                //主分片GatewayAllocator
+                ExistingShardsAllocator allocator = getAllocatorForShard(shardRouting, allocation);
+                allocator.allocateUnassigned(shardRouting, allocation, primaryIterator);
             }
         }
-
+        // 分配后处理
         for (final ExistingShardsAllocator existingShardsAllocator : existingShardsAllocators.values()) {
             existingShardsAllocator.afterPrimariesBeforeReplicas(allocation);
         }
-
+        //副本分片
         final RoutingNodes.UnassignedShards.UnassignedIterator replicaIterator = allocation.routingNodes().unassigned().iterator();
         while (replicaIterator.hasNext()) {
             final ShardRouting shardRouting = replicaIterator.next();
-            if (shardRouting.primary() == false) {//副本分片GatewayAllocator
-                getAllocatorForShard(shardRouting, allocation).allocateUnassigned(shardRouting, allocation, replicaIterator);
+            if (shardRouting.primary() == false) {
+                //副本分片GatewayAllocator
+                ExistingShardsAllocator allocator = getAllocatorForShard(shardRouting, allocation);
+                allocator.allocateUnassigned(shardRouting, allocation, replicaIterator);
             }
         }
         SourceLogger.info(AllocationService.class, "allocateExistingUnassignedShards end !");
