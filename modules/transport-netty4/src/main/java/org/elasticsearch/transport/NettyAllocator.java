@@ -52,6 +52,7 @@ public class NettyAllocator {
             ByteSizeValue g1gcRegionSize = new ByteSizeValue(g1gcRegionSizeInBytes);
 
             ByteBufAllocator delegate;
+            //如果heap小于等于1g或者使用g1并且g1的region大小小于1mb使用非池化分配器
             if (useUnpooled(heapSizeInBytes, g1gcEnabled, g1gcRegionSizeIsKnown, g1gcRegionSizeInBytes)) {
                 delegate = UnpooledByteBufAllocator.DEFAULT;
                 if (g1gcEnabled && g1gcRegionSizeIsKnown) {
@@ -75,6 +76,7 @@ public class NettyAllocator {
                     maxOrder = PooledByteBufAllocator.defaultMaxOrder();
                 } else {
                     pageSize = 8192;
+                    //如果没有开启gc或者g1的RegionSize大于等于4mb
                     if (g1gcEnabled == false || g1gcRegionSizeIsKnown == false || g1gcRegionSizeInBytes >= (4 * 1024 * 1024)) {
                         // This combined with a 8192 page size = 1 MB chunk sizes
                         maxOrder = 7;
@@ -86,10 +88,11 @@ public class NettyAllocator {
                         maxOrder = 5;
                     }
                 }
-                int tinyCacheSize = PooledByteBufAllocator.defaultTinyCacheSize();
-                int smallCacheSize = PooledByteBufAllocator.defaultSmallCacheSize();
-                int normalCacheSize = PooledByteBufAllocator.defaultNormalCacheSize();
-                boolean useCacheForAllThreads = PooledByteBufAllocator.defaultUseCacheForAllThreads();
+                //这里是CacheSize，注意不要和tiny规格搞混了
+                int tinyCacheSize = PooledByteBufAllocator.defaultTinyCacheSize();//tiny缓存池的大小默认512
+                int smallCacheSize = PooledByteBufAllocator.defaultSmallCacheSize();//small缓存池的大小默认256
+                int normalCacheSize = PooledByteBufAllocator.defaultNormalCacheSize();//norma缓存池的大小默认64
+                boolean useCacheForAllThreads = PooledByteBufAllocator.defaultUseCacheForAllThreads();//是否使用ThreadLocal缓存内存分配
                 delegate = new PooledByteBufAllocator(false, nHeapArena, 0, pageSize, maxOrder, tinyCacheSize,
                     smallCacheSize, normalCacheSize, useCacheForAllThreads);
                 int chunkSizeInBytes = pageSize << maxOrder;
@@ -103,6 +106,7 @@ public class NettyAllocator {
             }
             ALLOCATOR = new NoDirectBuffers(delegate);
         }
+
     }
 
     public static void logAllocatorDescriptionIfNeeded() {
@@ -144,7 +148,7 @@ public class NettyAllocator {
             return true;
         } else if (userForcedPooled()) {
             return true;
-        } else if (heapSizeInBytes <= 1 << 30) {
+        } else if (heapSizeInBytes <= 1 << 30) {//如果小于等于1g
             // If the heap is 1GB or less we use unpooled
             return true;
         } else if (g1gcEnabled == false) {

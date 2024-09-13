@@ -42,12 +42,15 @@ final class Netty4MessageChannelHandler extends ChannelDuplexHandler {
     private WriteOperation currentWrite;
     private final InboundPipeline pipeline;
 
-    Netty4MessageChannelHandler(PageCacheRecycler recycler, Netty4Transport transport) {
+    private String role;
+
+    Netty4MessageChannelHandler(PageCacheRecycler recycler, Netty4Transport transport,String role) {
         this.transport = transport;
         final ThreadPool threadPool = transport.getThreadPool();
         final Transport.RequestHandlers requestHandlers = transport.getRequestHandlers();
         this.pipeline = new InboundPipeline(transport.getVersion(), transport.getStatsTracker(), recycler, threadPool::relativeTimeInMillis,
             transport.getInflightBreaker(), requestHandlers::getHandler, transport::inboundMessage);
+        this.role = role;
     }
 
     @Override
