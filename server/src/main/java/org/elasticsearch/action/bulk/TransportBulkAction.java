@@ -519,7 +519,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 if (task != null) {
                     bulkShardRequest.setParentTask(nodeId, task.getId());
                 }
-                SourceLogger.info(this.getClass(),"send bulkShardRequest to {}",shardId);
+                //SourceLogger.info(this.getClass(),"send bulkShardRequest to {}",shardId);
                 shardBulkAction.execute(bulkShardRequest, new ActionListener<BulkShardResponse>() {
                     @Override
                     public void onResponse(BulkShardResponse bulkShardResponse) {

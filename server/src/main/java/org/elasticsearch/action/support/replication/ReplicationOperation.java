@@ -109,8 +109,7 @@ public class ReplicationOperation<
 
         totalShards.incrementAndGet();
         pendingActions.incrementAndGet(); // increase by 1 until we finish all primary coordination
-        // 注册回调 handlePrimaryResult()，这里会发送bulk到副本
-        // 调用 PrimaryShardReference.perform()
+        //实际会执行shardOperationOnPrimary()方法，注意这里注册handlePrimaryResult()回调
         primary.perform(request, ActionListener.wrap(this::handlePrimaryResult, this::finishAsFailed));
     }
 
@@ -137,7 +136,6 @@ public class ReplicationOperation<
             final ReplicationGroup replicationGroup = primary.getReplicationGroup();
             final PendingReplicationActions pendingReplicationActions = primary.getPendingReplicationActions();
             markUnavailableShardsAsStale(replicaRequest, replicationGroup);
-            SourceLogger.info(this.getClass(),"========= begin performOnReplicas");
             performOnReplicas(replicaRequest, globalCheckpoint, maxSeqNoOfUpdatesOrDeletes, replicationGroup, pendingReplicationActions);
         }
         primaryResult.runPostReplicationActions(new ActionListener<Void>() {
@@ -236,8 +234,7 @@ public class ReplicationOperation<
 
             @Override
             public void tryAction(ActionListener<ReplicaResponse> listener) {
-                SourceLogger.info(ReplicationOperation.class,"try performOnReplica {} for request",
-                    shard.shardId());
+                //发送请求到副本
                 replicasProxy.performOn(shard, replicaRequest, primaryTerm, globalCheckpoint, maxSeqNoOfUpdatesOrDeletes, listener);
             }
 

@@ -102,7 +102,7 @@ public class GlobalCheckpointSyncAction extends TransportReplicationAction<
     @Override
     protected void shardOperationOnReplica(Request shardRequest, IndexShard replica, ActionListener<ReplicaResult> listener) {
         ActionListener.completeWith(listener, () -> {
-            SourceLogger.info(GlobalCheckpointSyncAction.class,"execute maybeSyncTranslog on Replica");
+            //SourceLogger.info(GlobalCheckpointSyncAction.class,"execute maybeSyncTranslog on Replica");
             maybeSyncTranslog(replica);
             return new ReplicaResult();
         });

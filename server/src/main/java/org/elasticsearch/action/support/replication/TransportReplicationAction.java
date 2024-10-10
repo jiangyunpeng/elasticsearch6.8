@@ -338,7 +338,7 @@ public abstract class TransportReplicationAction<
                     primaryRequest.getTargetAllocationID(), primaryRequest.getPrimaryTerm(), actualTerm);
             }
 
-            SourceLogger.info(AsyncPrimaryAction.class,"acquirePrimaryOperationPermit {} ",shardId);
+//            SourceLogger.info(AsyncPrimaryAction.class,"acquirePrimaryOperationPermit {} ",shardId);
 
             acquirePrimaryOperationPermit(
                     indexShard,
@@ -393,8 +393,6 @@ public abstract class TransportReplicationAction<
                         });
                 } else {
                     setPhase(replicationTask, "primary");
-                    SourceLogger.info(AsyncPrimaryAction.class,"Success acquirePrimaryOperationPermit {} ",primaryShardReference.indexShard.shardId());
-
                     final ActionListener<Response> responseListener = ActionListener.wrap(response -> {
                         adaptResponse(response, primaryShardReference.indexShard);
 
@@ -517,7 +515,6 @@ public abstract class TransportReplicationAction<
     protected void handleReplicaRequest(final ConcreteReplicaRequest<ReplicaRequest> replicaRequest, final TransportChannel channel,
                                         final Task task) {
         //SourceLogger.info(this.getClass(),"handleReplicaRequest {} ",replicaRequest.getRequest().shardId());
-
         Releasable releasable = checkReplicaLimits(replicaRequest.getRequest());
         ActionListener<ReplicaResponse> listener =
             ActionListener.runBefore(new ChannelActionListener<>(channel, transportReplicaAction, replicaRequest), releasable::close);
@@ -571,9 +568,9 @@ public abstract class TransportReplicationAction<
         public void onResponse(Releasable releasable) {
             assert replica.getActiveOperationsCount() != 0 : "must perform shard operation under a permit";
             try {
-                SourceLogger.info(AsyncReplicaAction.class,"副本操作成功获取到锁");
-                //调用TransportWriteAction.shardOperationOnReplica()
+                //SourceLogger.info(AsyncReplicaAction.class,"success get lock on Replica");
 
+                //调用TransportWriteAction.shardOperationOnReplica()添加doc
                 shardOperationOnReplica(replicaRequest.getRequest(), replica, ActionListener.wrap((replicaResult) ->
                     replicaResult.runPostReplicaActions(
                         ActionListener.wrap(r -> {
@@ -752,7 +749,8 @@ public abstract class TransportReplicationAction<
                 }
                 //获取主分片所在node，如果是本地执行performLocalAction，否则执行performRemoteAction
                 final DiscoveryNode node = state.nodes().get(primary.currentNodeId());
-                SourceLogger.info(this.getClass(),"reroute {} to {}",primary.shardId(),node);
+                SourceLogger.info(this.getClass(),"reroute {} to {} with request {}",
+                    primary.shardId(), node, request);
 
                 if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                     performLocalAction(state, primary, node, indexMetadata);
@@ -1088,6 +1086,8 @@ public abstract class TransportReplicationAction<
                 request, replica.allocationId().getId(), primaryTerm, globalCheckpoint, maxSeqNoOfUpdatesOrDeletes);
             final ActionListenerResponseHandler<ReplicaResponse> handler = new ActionListenerResponseHandler<>(listener,
                 ReplicaResponse::new);
+
+            SourceLogger.info(ReplicasProxy.class,"send ReplicaRequest {} to node {} with {}",replica.shardId(),node,replicaRequest);
             //发送Action indices:data/write/bulk[s][r] 对应的是 handleReplicaRequest()
             transportService.sendRequest(node, transportReplicaAction, replicaRequest, transportOptions, handler);
         }

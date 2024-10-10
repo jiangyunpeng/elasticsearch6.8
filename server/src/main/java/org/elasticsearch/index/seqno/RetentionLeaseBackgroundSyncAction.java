@@ -142,6 +142,7 @@ public class RetentionLeaseBackgroundSyncAction extends TransportReplicationActi
             assert request.waitForActiveShards().equals(ActiveShardCount.NONE) : request.waitForActiveShards();
             Objects.requireNonNull(request);
             Objects.requireNonNull(primary);
+            //在主分片执行 retention leases 操作
             primary.persistRetentionLeases();
             return new PrimaryResult<>(request, new ReplicationResponse());
         });

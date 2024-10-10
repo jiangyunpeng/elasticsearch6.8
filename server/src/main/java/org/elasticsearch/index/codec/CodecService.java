@@ -38,7 +38,7 @@ public class CodecService {
         if (mapperService == null) {
             codecs.put(DEFAULT_CODEC, new Lucene87Codec());
             codecs.put(BEST_COMPRESSION_CODEC, new Lucene87Codec(Mode.BEST_COMPRESSION));
-        } else {
+        } else {//默认都不会为空
             codecs.put(DEFAULT_CODEC,
                     new PerFieldMappingPostingFormatCodec(Mode.BEST_SPEED, mapperService, logger));
             codecs.put(BEST_COMPRESSION_CODEC,

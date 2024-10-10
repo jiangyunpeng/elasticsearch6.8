@@ -300,7 +300,7 @@ public abstract class AsyncShardFetch<T extends BaseNodeResponse> implements Rel
     // visible for testing
     void asyncFetch(final DiscoveryNode[] nodes, long fetchingRound) {
         logger.trace("{} fetching [{}] from {}", shardId, type, nodes);
-        SourceLogger.debug(this.getClass(),"{} fetching [{}] from {}",shardId, type, Stream.of(nodes).collect(Collectors.toList()));
+        //SourceLogger.debug(this.getClass(),"{} fetching [{}] from {}",shardId, type, Stream.of(nodes).collect(Collectors.toList()));
         action.list(shardId, customDataPath, nodes, new ActionListener<BaseNodesResponse<T>>() {
             @Override
             public void onResponse(BaseNodesResponse<T> response) {

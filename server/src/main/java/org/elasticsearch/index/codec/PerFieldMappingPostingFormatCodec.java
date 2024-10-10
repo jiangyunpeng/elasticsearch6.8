@@ -46,7 +46,7 @@ public class PerFieldMappingPostingFormatCodec extends Lucene87Codec {
         final MappedFieldType fieldType = mapperService.fieldType(field);
         if (fieldType == null) {
             logger.warn("no index mapper found for field: [{}] returning default postings format", field);
-        } else if (fieldType instanceof CompletionFieldMapper.CompletionFieldType) {
+        } else if (fieldType instanceof CompletionFieldMapper.CompletionFieldType) { //如果是自动补全类型，这种类型是es扩展的
             return CompletionFieldMapper.CompletionFieldType.postingsFormat();
         }
         return super.getPostingsFormatForField(field);
