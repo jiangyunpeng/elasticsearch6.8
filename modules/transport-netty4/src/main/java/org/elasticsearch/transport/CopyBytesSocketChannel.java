@@ -153,10 +153,6 @@ public class CopyBytesSocketChannel extends Netty4NioSocketChannel {
 
     /**
      * 从用户写入的原始数据写入到DirectByteBuf
-     *
-     * @param source
-     * @param nioBufferCnt
-     * @param destination
      */
     private static void copyBytes(ByteBuffer[] source, int nioBufferCnt, ByteBuffer destination) {
         for (int i = 0; i < nioBufferCnt && destination.hasRemaining(); i++) {

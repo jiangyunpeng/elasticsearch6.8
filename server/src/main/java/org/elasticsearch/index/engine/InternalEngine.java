@@ -87,6 +87,7 @@ import org.elasticsearch.index.translog.TranslogConfig;
 import org.elasticsearch.index.translog.TranslogCorruptedException;
 import org.elasticsearch.index.translog.TranslogDeletionPolicy;
 import org.elasticsearch.index.translog.TranslogStats;
+import org.elasticsearch.metric.MetricRegistry;
 import org.elasticsearch.search.suggest.completion.CompletionStats;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -1014,6 +1015,7 @@ public class InternalEngine extends Engine {
                 return indexResult;
             } finally {
                 releaseInFlightDocs(reservedDocs);
+                MetricRegistry.measure("bulk").entry(shardId.getIndexName()).meter("docCount").mark(index.docs().size());
             }
         } catch (RuntimeException | IOException e) {
             try {
