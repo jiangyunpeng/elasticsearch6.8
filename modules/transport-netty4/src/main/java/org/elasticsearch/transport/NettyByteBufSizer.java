@@ -28,10 +28,10 @@ public class NettyByteBufSizer extends MessageToMessageDecoder<ByteBuf> {
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf buf, List<Object> out) {
         // 获取当前 ByteBuf 可读取的字节数
-        SourceLogger.info(this.getClass(),"receive {}",buf);
+        //SourceLogger.info(this.getClass(),"receive {}",buf);
         int readableBytes = buf.readableBytes();
         if (buf.capacity() >= 1024) {
-            SourceLogger.info(this.getClass(),"resize buffer from {} to {} ",buf.capacity(),readableBytes);
+            //SourceLogger.info(this.getClass(),"resize buffer from {} to {} ",buf.capacity(),readableBytes);
             //discardReadBytes()会丢弃已经读取的字节数，capacity()会重新申请新新的内存并回收老的
             ByteBuf resized = buf.discardReadBytes().capacity(readableBytes);
             assert resized.readableBytes() == readableBytes;

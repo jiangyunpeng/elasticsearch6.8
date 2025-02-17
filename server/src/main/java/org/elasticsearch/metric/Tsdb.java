@@ -26,9 +26,24 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Tsdb {
-
-
     private static final Appender logAppender = new Appender();
+
+
+    public void write(StatRollingData data) {
+
+    }
+
+    /**
+     * 时间格式支持: yyyymmdd和yyyymmddhh两种
+     */
+    public List<Point> query(String time, String fieldKey,int topN) {
+        return null;
+    }
+
+    public static class Point {
+        private String name;
+        private double[] point;
+    }
 
     /**
      * 格式：
@@ -135,7 +150,7 @@ public class Tsdb {
             File logFile = new File(logDir, "tsdb-" + name + ".log");
             System.out.println("logFile path: " + logFile);
             try {
-                return new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile,true)));
+                return new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile, true)));
             } catch (FileNotFoundException e) {
                 throw new RuntimeException(e);
             }

@@ -906,6 +906,13 @@ public class InternalEngine extends Engine {
         final boolean doThrottle = index.origin().isRecovery() == false;
         //加锁
         try (ReleasableLock releasableLock = readLock.acquire()) {
+            try {
+                SourceLogger.info(this.getClass(),"模拟写入index慢... sleep 500");
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
             ensureOpen();
             assert assertIncomingSequenceNumber(index.origin(), index.seqNo());
             int reservedDocs = 0;

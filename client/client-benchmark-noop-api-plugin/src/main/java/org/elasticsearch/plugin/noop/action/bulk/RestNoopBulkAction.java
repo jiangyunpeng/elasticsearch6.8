@@ -65,7 +65,7 @@ public class RestNoopBulkAction extends BaseRestHandler {
         if (waitForActiveShards != null) {
             bulkRequest.waitForActiveShards(ActiveShardCount.parseString(waitForActiveShards));
         }
-        bulkRequest.timeout(request.paramAsTime("timeout", BulkShardRequest.DEFAULT_TIMEOUT));
+        bulkRequest.timeout(request.paramAsTime("timeout", dRequest.DEFAULT_TIMEOUT));
         bulkRequest.setRefreshPolicy(request.param("refresh"));
         bulkRequest.add(request.requiredContent(), defaultIndex, defaultType, defaultRouting,
             null, defaultPipeline, defaultRequireAlias, true, request.getXContentType());

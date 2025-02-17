@@ -40,8 +40,8 @@ public class RestMetricBulkAction extends AbstractCatAction {
     protected RestChannelConsumer doCatRequest(RestRequest request, NodeClient client) {
         return channel -> {
             Table table = getTableWithHeader(request);
-            Comparator<MetricEntry> comparator = (m1, m2) -> Long.valueOf(m2.meter("docCount").getCount()).compareTo(m1.meter("docCount").getCount());
-            MetricRegistry.measure("bulk").entries(comparator).forEach(entry -> {
+            Comparator<MetricEntry> comparator = (m1, m2) -> Double.valueOf(m2.meter("docCount").getOneMinuteRate()).compareTo(m1.meter("docCount").getOneMinuteRate());
+            for (MetricEntry entry : MetricRegistry.measure("bulk").entries(comparator)) {
                 String shardName = entry.getName();
                 Meter count = entry.meter("docCount");
                 table.startRow();
@@ -49,7 +49,7 @@ public class RestMetricBulkAction extends AbstractCatAction {
                 table.addCell(count.getCount());    //bulk docCount
                 table.addCell(roundx1(count.getOneMinuteRate()));//qps
                 table.endRow();
-            });
+            }
             channel.sendResponse(RestTable.buildResponse(table, channel));
         };
     }

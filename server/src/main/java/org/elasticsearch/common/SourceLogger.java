@@ -22,7 +22,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -142,7 +141,7 @@ public class SourceLogger {
             }
         }
 
-//        logQueue.add(log);
+        logQueue.add(log);
 
 //       System.out.println(log);
 

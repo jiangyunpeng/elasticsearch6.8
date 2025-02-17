@@ -194,6 +194,7 @@ public abstract class TransportWriteAction<
         threadPool.executor(executorFunction.apply(replica)).execute(new ActionRunnable<ReplicaResult>(listener) {
             @Override
             protected void doRun() {
+                SourceLogger.info(this.getClass(),"execute shardOperationOnReplica");
                 dispatchedShardOperationOnReplica(request, replica, listener);
             }
 
